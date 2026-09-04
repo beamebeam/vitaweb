@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, ActivityIndicator } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from './utils/theme';
+import { useIsDesktop } from './utils/responsive';
 import { isOnboardingCompleted, isPinEnabled, getProfile, getSession, subscribeAuthChanges } from './utils/storage';
 import { rescheduleAllMedicineReminders, rescheduleControlReminder } from './utils/notifications';
 
+import SidebarNav from './components/SidebarNav';
 import AuthScreen from './screens/AuthScreen';
 import PinLockScreen from './screens/PinLockScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -26,6 +28,7 @@ import OnboardingScreen from './screens/onboarding/OnboardingScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
+const navigationRef = createNavigationContainerRef();
 
 // ===== Stack untuk tab Obat (daftar -> tambah / detail) =====
 function ObatStack() {
@@ -90,6 +93,8 @@ const ICONS = {
 };
 
 export default function App() {
+  const isDesktop = useIsDesktop();
+  const [activeTabName, setActiveTabName] = useState('Beranda');
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState(null);
   const [onboardingDone, setOnboardingDone] = useState(false);
@@ -187,36 +192,64 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NavigationContainer>
-        <Tab.Navigator
-          screenOptions={({ route }) => ({
-            headerShown: false,
-            tabBarActiveTintColor: colors.green,
-            tabBarInactiveTintColor: colors.textTertiary,
-            tabBarStyle: {
-              borderTopWidth: 0.5,
-              borderTopColor: colors.border,
-              backgroundColor: colors.screenBg,
-              height: 64,
-              paddingTop: 6,
-              paddingBottom: 8,
-            },
-            tabBarLabelStyle: {
-              fontSize: 10,
-            },
-            tabBarIcon: ({ color, focused }) => {
-              const name = focused ? ICONS[route.name] : `${ICONS[route.name]}-outline`;
-              return <Ionicons name={name} size={20} color={color} />;
-            },
-          })}
-        >
-          <Tab.Screen name="Beranda" component={BerandaStack} />
-          <Tab.Screen name="Obat" component={ObatStack} />
-          <Tab.Screen name="Kontrol" component={KontrolStack} />
-          <Tab.Screen name="Timeline" component={TimelineStack} />
-          <Tab.Screen name="Pengaturan" component={SettingsStack} />
-        </Tab.Navigator>
-      </NavigationContainer>
+      <View style={{ flex: 1, flexDirection: isDesktop ? 'row' : 'column', backgroundColor: colors.screenBg }}>
+        {isDesktop && (
+          <SidebarNav
+            activeTab={activeTabName}
+            onTabPress={(tab) => navigationRef.current?.navigate(tab)}
+          />
+        )}
+        <View style={{ flex: 1, alignItems: isDesktop ? 'center' : 'stretch' }}>
+          <View style={{ flex: 1, width: '100%', maxWidth: isDesktop ? 720 : undefined }}>
+            <NavigationContainer
+              ref={navigationRef}
+              onReady={() => {
+                const rootState = navigationRef.current?.getRootState();
+                setActiveTabName(rootState?.routes?.[rootState.index]?.name || 'Beranda');
+              }}
+              onStateChange={() => {
+                // Ambil nama tab paling atas (bukan nama screen di dalam stack-nya) supaya
+                // sidebar highlight-nya tetap benar walau lagi di halaman detail/tambah.
+                const rootState = navigationRef.current?.getRootState();
+                const rootRouteName = rootState?.routes?.[rootState.index]?.name;
+                if (rootRouteName) setActiveTabName(rootRouteName);
+              }}
+            >
+              <Tab.Navigator
+                screenOptions={({ route }) => ({
+                  headerShown: false,
+                  tabBarActiveTintColor: colors.green,
+                  tabBarInactiveTintColor: colors.textTertiary,
+                  // Di desktop, tab bar bawah bawaan disembunyikan total - digantikan SidebarNav di kiri.
+                  tabBarStyle: isDesktop
+                    ? { display: 'none' }
+                    : {
+                        borderTopWidth: 0.5,
+                        borderTopColor: colors.border,
+                        backgroundColor: colors.screenBg,
+                        height: 64,
+                        paddingTop: 6,
+                        paddingBottom: 8,
+                      },
+                  tabBarLabelStyle: {
+                    fontSize: 10,
+                  },
+                  tabBarIcon: ({ color, focused }) => {
+                    const name = focused ? ICONS[route.name] : `${ICONS[route.name]}-outline`;
+                    return <Ionicons name={name} size={20} color={color} />;
+                  },
+                })}
+              >
+                <Tab.Screen name="Beranda" component={BerandaStack} />
+                <Tab.Screen name="Obat" component={ObatStack} />
+                <Tab.Screen name="Kontrol" component={KontrolStack} />
+                <Tab.Screen name="Timeline" component={TimelineStack} />
+                <Tab.Screen name="Pengaturan" component={SettingsStack} />
+              </Tab.Navigator>
+            </NavigationContainer>
+          </View>
+        </View>
+      </View>
     </SafeAreaProvider>
   );
 }
