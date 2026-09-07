@@ -280,8 +280,10 @@ export async function importAllDataFromCsv(csvText) {
   }
 
   // Hapus semua data lama milik akun ini (urutan aman berkat ON DELETE CASCADE di database)
-  await supabase.from('medicines').delete().eq('user_id', userId);
-  await supabase.from('control_visits').delete().eq('user_id', userId);
+  const { error: delMedError } = await supabase.from('medicines').delete().eq('user_id', userId);
+  if (delMedError) throw delMedError;
+  const { error: delVisitError } = await supabase.from('control_visits').delete().eq('user_id', userId);
+  if (delVisitError) throw delVisitError;
 
   if (sectionsData.profile && sectionsData.profile[0]) {
     const p = sectionsData.profile[0];
@@ -395,10 +397,17 @@ export async function importAllDataFromCsv(csvText) {
 // ada (supaya tidak perlu daftar ulang), tapi isi profil direset seperti akun baru.
 export async function clearAllData() {
   const userId = await getUserId();
-  await supabase.from('medicines').delete().eq('user_id', userId); // cascade: logs & stock_history & timeline obat ikut terhapus
-  await supabase.from('control_visits').delete().eq('user_id', userId); // cascade: timeline kontrol ikut terhapus
-  await supabase.from('timeline_entries').delete().eq('user_id', userId); // sisa entri manual (jurnal/gejala/milestone)
-  await supabase.from('profiles').update({
+
+  const { error: medError } = await supabase.from('medicines').delete().eq('user_id', userId); // cascade: logs & stock_history & timeline obat ikut terhapus
+  if (medError) throw medError;
+
+  const { error: visitError } = await supabase.from('control_visits').delete().eq('user_id', userId); // cascade: timeline kontrol ikut terhapus
+  if (visitError) throw visitError;
+
+  const { error: timelineError } = await supabase.from('timeline_entries').delete().eq('user_id', userId); // sisa entri manual (jurnal/gejala/milestone)
+  if (timelineError) throw timelineError;
+
+  const { error: profileError } = await supabase.from('profiles').update({
     nickname: null,
     diagnosis_date: null,
     cd4_at_diagnosis: null,
@@ -409,6 +418,7 @@ export async function clearAllData() {
     pin_code: null,
     notifications_enabled: false,
   }).eq('id', userId);
+  if (profileError) throw profileError;
 }
 
 // ============================================================

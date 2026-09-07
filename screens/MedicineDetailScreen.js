@@ -108,15 +108,23 @@ export default function MedicineDetailScreen({ route, navigation }) {
       Alert.alert('Tanggal kosong', 'Pilih tanggal mulai botol ini.');
       return;
     }
-    await addNewStock(medicineId, amount, newStockStartDate);
-    setShowAddStock(false);
-    await loadData();
+    try {
+      await addNewStock(medicineId, amount, newStockStartDate);
+      setShowAddStock(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   // Tombol "Minum sekarang" - selalu pakai tanggal HARI INI (sesuai aturan baru)
   const handleQuickTaken = async () => {
-    await markMedicineTaken(medicineId, medicine.scheduleTime);
-    await loadData();
+    try {
+      await markMedicineTaken(medicineId, medicine.scheduleTime);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleOpenManualLog = () => {
@@ -134,10 +142,14 @@ export default function MedicineDetailScreen({ route, navigation }) {
       Alert.alert('Jam kosong', 'Pilih jam minum obat.');
       return;
     }
-    // bottleNumber tidak perlu dipilih - otomatis dicari dari rentang tanggal botol yang sesuai
-    await addManualMedicineLog(medicineId, medicine.scheduleTime, manualDate, manualTime);
-    setShowManualLog(false);
-    await loadData();
+    try {
+      // bottleNumber tidak perlu dipilih - otomatis dicari dari rentang tanggal botol yang sesuai
+      await addManualMedicineLog(medicineId, medicine.scheduleTime, manualDate, manualTime);
+      setShowManualLog(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleOpenEditLog = (log) => {
@@ -149,12 +161,16 @@ export default function MedicineDetailScreen({ route, navigation }) {
       Alert.alert('Data tidak lengkap', 'Tanggal dan jam wajib diisi.');
       return;
     }
-    await updateMedicineLog(editingLog.id, {
-      dateString: editingLog.editDate,
-      takenAtTime: editingLog.editTime,
-    });
-    setEditingLog(null);
-    await loadData();
+    try {
+      await updateMedicineLog(editingLog.id, {
+        dateString: editingLog.editDate,
+        takenAtTime: editingLog.editTime,
+      });
+      setEditingLog(null);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleDeleteLog = (log) => {
@@ -167,8 +183,12 @@ export default function MedicineDetailScreen({ route, navigation }) {
           text: 'Hapus',
           style: 'destructive',
           onPress: async () => {
-            await deleteMedicineLog(log.id);
-            await loadData();
+            try {
+              await deleteMedicineLog(log.id);
+              await loadData();
+            } catch (e) {
+              Alert.alert('Gagal menghapus', e.message || 'Terjadi kesalahan, coba lagi.');
+            }
           },
         },
       ]
@@ -189,12 +209,16 @@ export default function MedicineDetailScreen({ route, navigation }) {
       Alert.alert('Tanggal kosong', 'Pilih tanggal mulai botol ini.');
       return;
     }
-    await updateStockHistoryEntry(editingBottle.id, {
-      startDate: editingBottle.editStartDate,
-      amount,
-    });
-    setEditingBottle(null);
-    await loadData();
+    try {
+      await updateStockHistoryEntry(editingBottle.id, {
+        startDate: editingBottle.editStartDate,
+        amount,
+      });
+      setEditingBottle(null);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleDeleteBottle = () => {
@@ -207,9 +231,13 @@ export default function MedicineDetailScreen({ route, navigation }) {
           text: 'Hapus',
           style: 'destructive',
           onPress: async () => {
-            await deleteStockHistoryEntry(editingBottle.id);
-            setEditingBottle(null);
-            await loadData();
+            try {
+              await deleteStockHistoryEntry(editingBottle.id);
+              setEditingBottle(null);
+              await loadData();
+            } catch (e) {
+              Alert.alert('Gagal menghapus', e.message || 'Terjadi kesalahan, coba lagi.');
+            }
           },
         },
       ]
@@ -263,10 +291,14 @@ export default function MedicineDetailScreen({ route, navigation }) {
       Alert.alert('Konfirmasi tidak cocok', `Ketik tanggal hari ini (${today}) dengan benar untuk menghapus.`);
       return;
     }
-    await deleteMedicine(medicineId);
-    try { await rescheduleAllMedicineReminders(); } catch (e) {}
-    setShowDeleteConfirm(false);
-    navigation.goBack();
+    try {
+      await deleteMedicine(medicineId);
+      try { await rescheduleAllMedicineReminders(); } catch (e) {}
+      setShowDeleteConfirm(false);
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert('Gagal menghapus', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleToggleBottle = async (bottleNumber) => {

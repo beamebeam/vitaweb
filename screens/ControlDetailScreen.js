@@ -62,16 +62,20 @@ export default function ControlDetailScreen({ route, navigation }) {
       Alert.alert('Lengkapi data', 'Isi nama dan link/path dokumen.');
       return;
     }
-    if (editingAttachmentId) {
-      await updateAttachment(visitId, editingAttachmentId, { label: attLabel.trim(), urlOrPath: attUrl.trim() });
-    } else {
-      await addAttachmentToVisit(visitId, { label: attLabel.trim(), urlOrPath: attUrl.trim() });
+    try {
+      if (editingAttachmentId) {
+        await updateAttachment(visitId, editingAttachmentId, { label: attLabel.trim(), urlOrPath: attUrl.trim() });
+      } else {
+        await addAttachmentToVisit(visitId, { label: attLabel.trim(), urlOrPath: attUrl.trim() });
+      }
+      setAttLabel('');
+      setAttUrl('');
+      setEditingAttachmentId(null);
+      setShowAddAttachment(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
     }
-    setAttLabel('');
-    setAttUrl('');
-    setEditingAttachmentId(null);
-    setShowAddAttachment(false);
-    await loadData();
   };
 
   const handleDeleteAttachment = (att) => {
@@ -81,8 +85,12 @@ export default function ControlDetailScreen({ route, navigation }) {
         text: 'Hapus',
         style: 'destructive',
         onPress: async () => {
-          await deleteAttachment(visitId, att.id);
-          await loadData();
+          try {
+            await deleteAttachment(visitId, att.id);
+            await loadData();
+          } catch (e) {
+            Alert.alert('Gagal menghapus', e.message || 'Terjadi kesalahan, coba lagi.');
+          }
         },
       },
     ]);
@@ -98,15 +106,19 @@ export default function ControlDetailScreen({ route, navigation }) {
   };
 
   const handleSaveExamResult = async () => {
-    await updateControlVisit(visitId, {
-      cd4: cd4 ? parseFloat(cd4) : null,
-      viralLoad: viralLoad ? viralLoad.trim() : null,
-      bloodPressureSys: bloodPressureSys ? parseFloat(bloodPressureSys) : null,
-      bloodPressureDia: bloodPressureDia ? parseFloat(bloodPressureDia) : null,
-      weight: weight ? parseFloat(weight) : null,
-    });
-    setShowExamResult(false);
-    await loadData();
+    try {
+      await updateControlVisit(visitId, {
+        cd4: cd4 ? parseFloat(cd4) : null,
+        viralLoad: viralLoad ? viralLoad.trim() : null,
+        bloodPressureSys: bloodPressureSys ? parseFloat(bloodPressureSys) : null,
+        bloodPressureDia: bloodPressureDia ? parseFloat(bloodPressureDia) : null,
+        weight: weight ? parseFloat(weight) : null,
+      });
+      setShowExamResult(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleDelete = () => {
@@ -116,22 +128,30 @@ export default function ControlDetailScreen({ route, navigation }) {
         text: 'Hapus',
         style: 'destructive',
         onPress: async () => {
-          await deleteControlVisit(visitId);
-          try { await rescheduleControlReminder(); } catch (e) {}
-          navigation.goBack();
+          try {
+            await deleteControlVisit(visitId);
+            try { await rescheduleControlReminder(); } catch (e) {}
+            navigation.goBack();
+          } catch (e) {
+            Alert.alert('Gagal menghapus', e.message || 'Terjadi kesalahan, coba lagi.');
+          }
         },
       },
     ]);
   };
 
   const handleToggleCompleted = async () => {
-    if (visit.isCompleted) {
-      await unmarkControlVisitCompleted(visitId);
-    } else {
-      await markControlVisitCompleted(visitId);
+    try {
+      if (visit.isCompleted) {
+        await unmarkControlVisitCompleted(visitId);
+      } else {
+        await markControlVisitCompleted(visitId);
+      }
+      try { await rescheduleControlReminder(); } catch (e) {}
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal', e.message || 'Terjadi kesalahan, coba lagi.');
     }
-    try { await rescheduleControlReminder(); } catch (e) {}
-    await loadData();
   };
 
   const openAttachment = (urlOrPath) => {

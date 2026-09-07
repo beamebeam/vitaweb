@@ -127,19 +127,26 @@ export default function App() {
     let isMounted = true;
 
     (async () => {
-      const currentSession = await getSession();
-      if (!isMounted) return;
-      setSession(currentSession);
-      if (currentSession) {
-        await checkOnboarding();
+      try {
+        const currentSession = await getSession();
+        if (!isMounted) return;
+        setSession(currentSession);
+        if (currentSession) {
+          await checkOnboarding();
+        }
+      } catch (e) {
+        // Kalau ada error jaringan/Supabase saat pengecekan awal, jangan biarkan app
+        // macet selamanya di layar loading - tampilkan saja layar login/awal seadanya.
+        console.log('Gagal memuat sesi awal:', e);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      setLoading(false);
     })();
 
     const subscription = subscribeAuthChanges((newSession) => {
       setSession(newSession);
       if (newSession) {
-        checkOnboarding();
+        checkOnboarding().catch((e) => console.log('Gagal cek onboarding:', e));
       } else {
         // Logout: reset semua state lokal supaya kembali bersih ke layar login
         setOnboardingDone(false);

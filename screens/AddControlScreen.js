@@ -70,14 +70,18 @@ export default function AddControlScreen({ navigation, route }) {
   };
 
   const handleToggleCompleted = async () => {
-    if (isCompleted) {
-      await unmarkControlVisitCompleted(editingVisitId);
-      setIsCompleted(false);
-    } else {
-      await markControlVisitCompleted(editingVisitId);
-      setIsCompleted(true);
+    try {
+      if (isCompleted) {
+        await unmarkControlVisitCompleted(editingVisitId);
+        setIsCompleted(false);
+      } else {
+        await markControlVisitCompleted(editingVisitId);
+        setIsCompleted(true);
+      }
+      try { await rescheduleControlReminder(); } catch (e) {}
+    } catch (e) {
+      Alert.alert('Gagal', e.message || 'Terjadi kesalahan, coba lagi.');
     }
-    try { await rescheduleControlReminder(); } catch (e) {}
   };
 
   if (loading) {

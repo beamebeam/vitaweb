@@ -29,10 +29,18 @@ export default function PinLockScreen({ onUnlock }) {
     setPin(newPin);
 
     if (newPin.length === 6) {
-      const isValid = await verifyPinCode(newPin);
-      if (isValid) {
-        onUnlock();
-      } else {
+      try {
+        const isValid = await verifyPinCode(newPin);
+        if (isValid) {
+          onUnlock();
+        } else {
+          setError(true);
+          setTimeout(() => {
+            setPin('');
+            setError(false);
+          }, 600);
+        }
+      } catch (e) {
         setError(true);
         setTimeout(() => {
           setPin('');

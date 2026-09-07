@@ -79,9 +79,13 @@ export default function SettingsScreen({ navigation }) {
       Alert.alert('Nama kosong', 'Mohon isi nama panggilan.');
       return;
     }
-    await saveProfile({ nickname: nicknameInput.trim() });
-    setShowEditNickname(false);
-    await loadData();
+    try {
+      await saveProfile({ nickname: nicknameInput.trim() });
+      setShowEditNickname(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleOpenEditFaskes = () => {
@@ -90,9 +94,13 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handleSaveFaskes = async () => {
-    await saveProfile({ faskes: faskesInput.trim() });
-    setShowEditFaskes(false);
-    await loadData();
+    try {
+      await saveProfile({ faskes: faskesInput.trim() });
+      setShowEditFaskes(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleOpenEditEmergency = () => {
@@ -101,9 +109,13 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handleSaveEmergency = async () => {
-    await saveProfile({ emergencyContact: emergencyInput.trim() });
-    setShowEditEmergency(false);
-    await loadData();
+    try {
+      await saveProfile({ emergencyContact: emergencyInput.trim() });
+      setShowEditEmergency(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   // Toggle PIN: kalau mau AKTIFKAN -> buka setup PIN baru.
@@ -125,51 +137,63 @@ export default function SettingsScreen({ navigation }) {
   };
 
   const handleConfirmPinVerify = async () => {
-    const isValid = await verifyPinCode(pinVerifyInput);
-    if (!isValid) {
-      Alert.alert('PIN salah', 'PIN yang kamu masukkan tidak cocok.');
-      return;
-    }
-    setShowPinVerify(false);
-    if (pinVerifyPurpose === 'disable') {
-      await disablePin();
-      await loadData();
-      Alert.alert('PIN dimatikan', 'Aplikasi tidak akan meminta PIN lagi saat dibuka.');
-    } else if (pinVerifyPurpose === 'change') {
-      setShowPinSetup(true);
+    try {
+      const isValid = await verifyPinCode(pinVerifyInput);
+      if (!isValid) {
+        Alert.alert('PIN salah', 'PIN yang kamu masukkan tidak cocok.');
+        return;
+      }
+      setShowPinVerify(false);
+      if (pinVerifyPurpose === 'disable') {
+        await disablePin();
+        await loadData();
+        Alert.alert('PIN dimatikan', 'Aplikasi tidak akan meminta PIN lagi saat dibuka.');
+      } else if (pinVerifyPurpose === 'change') {
+        setShowPinSetup(true);
+      }
+    } catch (e) {
+      Alert.alert('Gagal', e.message || 'Terjadi kesalahan, coba lagi.');
     }
   };
 
   const handlePinSetupComplete = async (newPin) => {
-    await setPinCode(newPin);
-    setShowPinSetup(false);
-    await loadData();
-    Alert.alert('PIN tersimpan', 'PIN kamu sudah aktif dan akan diminta setiap kali membuka Vita.');
+    try {
+      await setPinCode(newPin);
+      setShowPinSetup(false);
+      await loadData();
+      Alert.alert('PIN tersimpan', 'PIN kamu sudah aktif dan akan diminta setiap kali membuka Vita.');
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   const handleToggleNotifications = async () => {
-    if (profile?.notificationsEnabled) {
-      await cancelAllNotifications();
-      await saveProfile({ notificationsEnabled: false });
-      await loadData();
-    } else {
-      const granted = await requestNotificationPermission();
-      if (!granted) {
-        Alert.alert(
-          'Izin notifikasi ditolak',
-          Platform.OS === 'web'
-            ? 'Pengingat terjadwal (jam minum obat & kontrol) belum didukung di versi web Vita. Gunakan aplikasi mobile untuk fitur ini.'
-            : 'Vita tidak bisa mengirim pengingat tanpa izin notifikasi. Aktifkan izin notifikasi untuk Vita di pengaturan HP kamu.'
-        );
-        return;
+    try {
+      if (profile?.notificationsEnabled) {
+        await cancelAllNotifications();
+        await saveProfile({ notificationsEnabled: false });
+        await loadData();
+      } else {
+        const granted = await requestNotificationPermission();
+        if (!granted) {
+          Alert.alert(
+            'Izin notifikasi ditolak',
+            Platform.OS === 'web'
+              ? 'Pengingat terjadwal (jam minum obat & kontrol) belum didukung di versi web Vita. Gunakan aplikasi mobile untuk fitur ini.'
+              : 'Vita tidak bisa mengirim pengingat tanpa izin notifikasi. Aktifkan izin notifikasi untuk Vita di pengaturan HP kamu.'
+          );
+          return;
+        }
+        await saveProfile({ notificationsEnabled: true });
+        try {
+          await rescheduleAllMedicineReminders();
+          await rescheduleControlReminder();
+        } catch (e) {}
+        await loadData();
+        Alert.alert('Pengingat aktif', 'Vita akan mengingatkan jam minum obat dan jadwal kontrol.');
       }
-      await saveProfile({ notificationsEnabled: true });
-      try {
-        await rescheduleAllMedicineReminders();
-        await rescheduleControlReminder();
-      } catch (e) {}
-      await loadData();
-      Alert.alert('Pengingat aktif', 'Vita akan mengingatkan jam minum obat dan jadwal kontrol.');
+    } catch (e) {
+      Alert.alert('Gagal', e.message || 'Terjadi kesalahan, coba lagi.');
     }
   };
 
@@ -258,9 +282,13 @@ export default function SettingsScreen({ navigation }) {
       Alert.alert('Konfirmasi tidak cocok', `Ketik tanggal hari ini (${today}) dengan benar.`);
       return;
     }
-    await clearAllData();
-    setShowClearConfirm(false);
-    Alert.alert('Selesai', 'Semua data telah dihapus. Silakan tutup dan buka ulang aplikasi.');
+    try {
+      await clearAllData();
+      setShowClearConfirm(false);
+      Alert.alert('Selesai', 'Semua data telah dihapus. Silakan tutup dan buka ulang aplikasi.');
+    } catch (e) {
+      Alert.alert('Gagal menghapus', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   return (

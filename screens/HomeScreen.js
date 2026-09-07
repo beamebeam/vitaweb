@@ -70,8 +70,12 @@ export default function HomeScreen({ navigation }) {
     const sudahDiminum = !!todayLogs[medicine.id];
     if (sudahDiminum) {
       // Batalkan langsung tanpa konfirmasi (ini cuma undo)
-      await unmarkMedicineTaken(medicine.id, todayString);
-      await loadData();
+      try {
+        await unmarkMedicineTaken(medicine.id, todayString);
+        await loadData();
+      } catch (e) {
+        Alert.alert('Gagal', e.message || 'Terjadi kesalahan, coba lagi.');
+      }
     } else {
       // Buka modal konfirmasi jam sebelum menandai sebagai diminum
       const now = new Date();
@@ -89,9 +93,13 @@ export default function HomeScreen({ navigation }) {
       return;
     }
 
-    await markMedicineTaken(medicine.id, medicine.scheduleTime, { takenAtTime: jamInput });
-    setConfirmModal(null);
-    await loadData();
+    try {
+      await markMedicineTaken(medicine.id, medicine.scheduleTime, { takenAtTime: jamInput });
+      setConfirmModal(null);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
   };
 
   if (loading) {

@@ -147,8 +147,12 @@ export default function AddTimelineScreen({ navigation, route }) {
         text: 'Hapus',
         style: 'destructive',
         onPress: async () => {
-          await deleteTimelineEntry(editingEntryId);
-          navigation.goBack();
+          try {
+            await deleteTimelineEntry(editingEntryId);
+            navigation.goBack();
+          } catch (e) {
+            Alert.alert('Gagal menghapus', e.message || 'Terjadi kesalahan, coba lagi.');
+          }
         },
       },
     ]);
