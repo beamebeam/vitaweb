@@ -8,6 +8,7 @@ import { DatePickerField, TimePickerField, FieldLabel } from '../components/Date
 import { colors, spacing, fontSize, radius } from '../utils/theme';
 import {
   getMedicineById,
+  getLogsForMedicine,
   getLogsForBottle,
   getOrphanLogsForMedicine,
   getStockHistoryForMedicine,
@@ -52,6 +53,7 @@ export default function MedicineDetailScreen({ route, navigation }) {
   const { medicineId } = route.params;
   const [medicine, setMedicine] = useState(null);
   const [stockHistory, setStockHistory] = useState([]);
+  const [consumedByBottle, setConsumedByBottle] = useState({}); // { [bottleNumber]: jumlah tablet terpakai }
   const [expandedBottle, setExpandedBottle] = useState(null);
   const [bottleLogs, setBottleLogs] = useState({});
   const [orphanLogs, setOrphanLogs] = useState([]);
@@ -80,6 +82,16 @@ export default function MedicineDetailScreen({ route, navigation }) {
 
     const orphans = await getOrphanLogsForMedicine(medicineId);
     setOrphanLogs(orphans);
+
+    // Hitung berapa tablet sudah terpakai per botol, untuk ditampilkan "terpakai/total"
+    const allLogs = await getLogsForMedicine(medicineId);
+    const doseAmount = med?.doseAmount || 1;
+    const countPerBottle = {};
+    allLogs.forEach((log) => {
+      if (log.bottleNumber === null || log.bottleNumber === undefined) return;
+      countPerBottle[log.bottleNumber] = (countPerBottle[log.bottleNumber] || 0) + doseAmount;
+    });
+    setConsumedByBottle(countPerBottle);
 
     if (expandedBottle !== null) {
       const logsForThisBottle = await getLogsForBottle(medicineId, expandedBottle);
@@ -438,7 +450,7 @@ export default function MedicineDetailScreen({ route, navigation }) {
                         Botol ke-{h.bottleNumber} <Text style={styles.historyStatusInline}>· {isCurrentBottle ? 'Sedang berjalan' : 'Selesai'}</Text>
                       </Text>
                       <Text style={styles.historySub}>
-                        {formatDateShortIndo(h.startDate)} → {formatDateShortIndo(h.endDateCalculated)} · {h.amount} tablet
+                        {formatDateShortIndo(h.startDate)} → {formatDateShortIndo(h.endDateCalculated)} · {Math.min(consumedByBottle[h.bottleNumber] || 0, h.amount)}/{h.amount} Tablet
                       </Text>
                     </View>
                   </TouchableOpacity>

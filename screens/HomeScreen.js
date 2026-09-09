@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, ActivityIndicator, Modal, TextInput, Linking } from 'react-native';
 import Alert from '../utils/alert';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -146,6 +146,19 @@ export default function HomeScreen({ navigation }) {
             <Ionicons name="notifications-outline" size={18} color={colors.green} />
           </TouchableOpacity>
         </View>
+
+        {/* Tombol aksi cepat - baru muncul kalau ada link Maps faskes yang diisi di Pengaturan */}
+        {!!profile?.faskesMapsUrl && (
+          <View style={styles.quickActionsRow}>
+            <TouchableOpacity
+              style={styles.quickPillButton}
+              onPress={() => Linking.openURL(profile.faskesMapsUrl).catch(() => {})}
+            >
+              <Ionicons name="location-outline" size={15} color={colors.green} />
+              <Text style={styles.quickPillButtonText}>Buka Google Maps Faskes</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Warning stok ARV menipis - hanya muncul kalau <= 5 tablet */}
         {stokMenipis && (
@@ -367,6 +380,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greenBg,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  quickPillButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.greenBg,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  quickPillButtonText: {
+    fontSize: fontSize.caption,
+    fontWeight: '500',
+    color: colors.green,
   },
   warningBanner: {
     flexDirection: 'row',

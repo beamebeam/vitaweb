@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScreenWrapper, PrimaryButton } from '../components/Common';
 import { DatePickerField, FieldLabel } from '../components/DateTimeFields';
 import { colors, spacing, fontSize, radius } from '../utils/theme';
-import { saveControlVisit, updateControlVisit, getControlVisitById, markControlVisitCompleted, unmarkControlVisitCompleted, getTodayDateString } from '../utils/storage';
+import { saveControlVisit, updateControlVisit, getControlVisitById, markControlVisitCompleted, unmarkControlVisitCompleted, getTodayDateString, getProfile } from '../utils/storage';
 import { rescheduleControlReminder } from '../utils/notifications';
 
 export default function AddControlScreen({ navigation, route }) {
@@ -21,9 +21,18 @@ export default function AddControlScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEditMode);
 
-  // Kalau mode edit, ambil data lama dan isi semua field
+  // Kalau mode edit, ambil data lama dan isi semua field.
+  // Kalau mode tambah baru, auto-isi faskes dari "Faskes utama" di Pengaturan (biar tidak ketik ulang tiap kali).
   useEffect(() => {
-    if (!isEditMode) return;
+    if (!isEditMode) {
+      (async () => {
+        try {
+          const profile = await getProfile();
+          if (profile?.faskes) setFaskes(profile.faskes);
+        } catch (e) {}
+      })();
+      return;
+    }
     (async () => {
       const visit = await getControlVisitById(editingVisitId);
       if (visit) {

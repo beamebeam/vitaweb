@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, Platform, StatusBar, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, fontSize, radius } from '../utils/theme';
@@ -67,10 +67,10 @@ export function BottomNav({ activeTab, onTabPress }) {
       {NAV_ITEMS.map((item) => {
         const isActive = activeTab === item.key;
         return (
-          <View
+          <TouchableOpacity
             key={item.key}
             style={styles.navItem}
-            onTouchEnd={() => onTabPress(item.key)}
+            onPress={() => onTabPress(item.key)}
           >
             <Ionicons
               name={isActive ? item.icon.replace('-outline', '') : item.icon}
@@ -85,7 +85,7 @@ export function BottomNav({ activeTab, onTabPress }) {
             >
               {item.label}
             </Text>
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>
@@ -122,16 +122,18 @@ export function PrimaryButton({ title, onPress, variant = 'primary', disabled })
   };
   const v = variants[variant] || variants.primary;
   return (
-    <View
+    <TouchableOpacity
       style={[
         styles.button,
         { backgroundColor: v.bg, borderColor: v.border, borderWidth: v.border ? 1 : 0 },
         disabled && { opacity: 0.5 },
       ]}
-      onTouchEnd={disabled ? undefined : onPress}
+      onPress={onPress}
+      disabled={disabled}
+      activeOpacity={0.75}
     >
       <Text style={[styles.buttonText, { color: v.text }]}>{title}</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 

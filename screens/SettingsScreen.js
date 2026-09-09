@@ -38,6 +38,7 @@ export default function SettingsScreen({ navigation }) {
 
   const [showEditFaskes, setShowEditFaskes] = useState(false);
   const [faskesInput, setFaskesInput] = useState('');
+  const [faskesMapsUrlInput, setFaskesMapsUrlInput] = useState('');
 
   const [showEditEmergency, setShowEditEmergency] = useState(false);
   const [emergencyInput, setEmergencyInput] = useState('');
@@ -91,12 +92,13 @@ export default function SettingsScreen({ navigation }) {
 
   const handleOpenEditFaskes = () => {
     setFaskesInput(profile?.faskes || '');
+    setFaskesMapsUrlInput(profile?.faskesMapsUrl || '');
     setShowEditFaskes(true);
   };
 
   const handleSaveFaskes = async () => {
     try {
-      await saveProfile({ faskes: faskesInput.trim() });
+      await saveProfile({ faskes: faskesInput.trim(), faskesMapsUrl: faskesMapsUrlInput.trim() });
       setShowEditFaskes(false);
       await loadData();
     } catch (e) {
@@ -502,6 +504,16 @@ export default function SettingsScreen({ navigation }) {
               placeholder="Contoh: RSUD Soreang"
               placeholderTextColor={colors.textTertiary}
             />
+            <Text style={styles.modalFieldLabelSmall}>Link Google Maps (opsional)</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={faskesMapsUrlInput}
+              onChangeText={setFaskesMapsUrlInput}
+              placeholder="Tempel link dari Google Maps di sini"
+              placeholderTextColor={colors.textTertiary}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowEditFaskes(false)}>
                 <Text style={styles.modalCancelText}>Batal</Text>
@@ -786,6 +798,11 @@ const styles = StyleSheet.create({
     padding: 10,
     fontSize: fontSize.body,
     marginBottom: spacing.md,
+  },
+  modalFieldLabelSmall: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   modalButtons: {
     flexDirection: 'row',
