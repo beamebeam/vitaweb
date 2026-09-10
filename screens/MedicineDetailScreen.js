@@ -8,6 +8,7 @@ import { DatePickerField, TimePickerField, FieldLabel } from '../components/Date
 import { colors, spacing, fontSize, radius } from '../utils/theme';
 import {
   getMedicineById,
+  getLinkedFaskesForMedicine,
   getLogsForMedicine,
   getLogsForBottle,
   getOrphanLogsForMedicine,
@@ -54,6 +55,7 @@ export default function MedicineDetailScreen({ route, navigation }) {
   const [medicine, setMedicine] = useState(null);
   const [stockHistory, setStockHistory] = useState([]);
   const [consumedByBottle, setConsumedByBottle] = useState({}); // { [bottleNumber]: jumlah tablet terpakai }
+  const [linkedFaskes, setLinkedFaskes] = useState(null); // { faskes, visitDate } atau null kalau tidak terkait kontrol manapun
   const [expandedBottle, setExpandedBottle] = useState(null);
   const [bottleLogs, setBottleLogs] = useState({});
   const [orphanLogs, setOrphanLogs] = useState([]);
@@ -92,6 +94,9 @@ export default function MedicineDetailScreen({ route, navigation }) {
       countPerBottle[log.bottleNumber] = (countPerBottle[log.bottleNumber] || 0) + doseAmount;
     });
     setConsumedByBottle(countPerBottle);
+
+    const faskesInfo = await getLinkedFaskesForMedicine(medicineId);
+    setLinkedFaskes(faskesInfo);
 
     if (expandedBottle !== null) {
       const logsForThisBottle = await getLogsForBottle(medicineId, expandedBottle);
@@ -367,8 +372,11 @@ export default function MedicineDetailScreen({ route, navigation }) {
           <InfoRow
             label="Dosis"
             value={formatDoseText(medicine.doseAmount, medicine.frequencyUnit)}
-            last={!medicine.notes}
+            last={!linkedFaskes && !medicine.notes}
           />
+          {linkedFaskes && (
+            <InfoRow label="Faskes" value={linkedFaskes.faskes} last={!medicine.notes} />
+          )}
           {medicine.notes ? (
             <View style={styles.notesBox}>
               <Text style={styles.notesLabel}>Catatan</Text>

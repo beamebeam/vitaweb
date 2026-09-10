@@ -15,6 +15,10 @@ import {
   markControlVisitCompleted,
   unmarkControlVisitCompleted,
   formatDateIndo,
+  getActiveMedicines,
+  getMedicinesReceivedForVisit,
+  addMedicineReceivedInVisit,
+  unlinkMedicineFromVisit,
 } from '../utils/storage';
 import { rescheduleControlReminder } from '../utils/notifications';
 
@@ -33,9 +37,20 @@ export default function ControlDetailScreen({ route, navigation }) {
   const [bloodPressureDia, setBloodPressureDia] = useState('');
   const [weight, setWeight] = useState('');
 
+  const [medicinesReceived, setMedicinesReceived] = useState([]);
+  const [activeMedicines, setActiveMedicines] = useState([]);
+  const [showAddMedicine, setShowAddMedicine] = useState(false);
+  const [showMedicinePicker, setShowMedicinePicker] = useState(false);
+  const [selectedMedicineId, setSelectedMedicineId] = useState(null);
+  const [receivedAmount, setReceivedAmount] = useState('30');
+
   const loadData = useCallback(async () => {
     const data = await getControlVisitById(visitId);
     setVisit(data);
+    const received = await getMedicinesReceivedForVisit(visitId);
+    setMedicinesReceived(received);
+    const meds = await getActiveMedicines();
+    setActiveMedicines(meds);
   }, [visitId]);
 
   useFocusEffect(
@@ -95,6 +110,53 @@ export default function ControlDetailScreen({ route, navigation }) {
         },
       },
     ]);
+  };
+
+  const handleOpenAddMedicine = () => {
+    setSelectedMedicineId(activeMedicines[0]?.id || null);
+    setReceivedAmount('30');
+    setShowAddMedicine(true);
+  };
+
+  const handleSaveMedicineReceived = async () => {
+    if (!selectedMedicineId) {
+      Alert.alert('Pilih obat', 'Pilih obat yang didapat pada kontrol ini.');
+      return;
+    }
+    const amount = parseInt(receivedAmount, 10);
+    if (!amount || amount <= 0) {
+      Alert.alert('Jumlah tidak valid', 'Masukkan jumlah tablet yang benar.');
+      return;
+    }
+    try {
+      await addMedicineReceivedInVisit(visitId, selectedMedicineId, amount, visit.visitDate);
+      setShowAddMedicine(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
+  };
+
+  const handleRemoveMedicineReceived = (item) => {
+    Alert.alert(
+      'Lepas tanda obat ini?',
+      `"${item.medicine?.name || 'Obat'}" tidak akan lagi ditandai berasal dari kontrol ini. Riwayat botolnya tetap ada di halaman Obat.`,
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Lepas',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await unlinkMedicineFromVisit(item.id);
+              await loadData();
+            } catch (e) {
+              Alert.alert('Gagal', e.message || 'Terjadi kesalahan, coba lagi.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleOpenExamResult = () => {
@@ -240,6 +302,32 @@ export default function ControlDetailScreen({ route, navigation }) {
 
         <Card style={{ marginBottom: spacing.sm }}>
           <View style={styles.attachmentHeader}>
+            <Text style={styles.cardLabel}>Obat diterima</Text>
+          </View>
+          {medicinesReceived.length === 0 && (
+            <Text style={styles.emptyText}>Belum ada obat yang ditandai dari kontrol ini.</Text>
+          )}
+          {medicinesReceived.map((item) => (
+            <View key={item.id} style={styles.attachmentRow}>
+              <View style={styles.attachmentMain}>
+                <Ionicons name="medical-outline" size={18} color={colors.green} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.attachmentLabel}>{item.medicine?.name || 'Obat sudah dihapus'}</Text>
+                  <Text style={styles.attachmentUrl}>{item.amount} tablet</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={() => handleRemoveMedicineReceived(item)} style={styles.logIconBtn}>
+                <Ionicons name="trash-outline" size={14} color={colors.textTertiary} />
+              </TouchableOpacity>
+            </View>
+          ))}
+          <TouchableOpacity style={styles.addAttachmentBtn} onPress={handleOpenAddMedicine}>
+            <Text style={styles.addAttachmentText}>+ Tandai obat diterima</Text>
+          </TouchableOpacity>
+        </Card>
+
+        <Card style={{ marginBottom: spacing.sm }}>
+          <View style={styles.attachmentHeader}>
             <Text style={styles.cardLabel}>Dokumen & foto</Text>
           </View>
           {(!visit.attachments || visit.attachments.length === 0) && (
@@ -376,6 +464,63 @@ export default function ControlDetailScreen({ route, navigation }) {
             </View>
           </View>
         </View>
+      </Modal>
+
+      <Modal visible={showAddMedicine} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Tandai obat diterima</Text>
+            <Text style={styles.modalSubText}>
+              Pilih obat yang sudah ada di halaman Obat. Kalau obatnya belum ada, tambahkan dulu
+              di tab Obat, lalu kembali ke sini.
+            </Text>
+            {activeMedicines.length === 0 ? (
+              <Text style={styles.emptyText}>Belum ada obat aktif. Tambahkan obat dulu di tab Obat.</Text>
+            ) : (
+              <TouchableOpacity style={styles.modalInput} onPress={() => setShowMedicinePicker(true)}>
+                <Text style={{ fontSize: fontSize.body, color: colors.textPrimary }}>
+                  {activeMedicines.find((m) => m.id === selectedMedicineId)?.name || 'Pilih obat'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            <TextInput
+              style={styles.modalInput}
+              value={receivedAmount}
+              onChangeText={setReceivedAmount}
+              placeholder="Jumlah tablet"
+              placeholderTextColor={colors.textTertiary}
+              keyboardType="numeric"
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowAddMedicine(false)}>
+                <Text style={styles.modalCancelText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveMedicineReceived} disabled={activeMedicines.length === 0}>
+                <Text style={styles.modalSaveText}>Simpan</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={showMedicinePicker} transparent animationType="slide">
+        <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowMedicinePicker(false)}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerSheetTitle}>Pilih obat</Text>
+            {activeMedicines.map((med) => (
+              <TouchableOpacity
+                key={med.id}
+                style={styles.pickerOption}
+                onPress={() => { setSelectedMedicineId(med.id); setShowMedicinePicker(false); }}
+              >
+                <Text style={[styles.pickerOptionText, selectedMedicineId === med.id && styles.pickerOptionTextActive]}>
+                  {med.name}
+                </Text>
+                {selectedMedicineId === med.id && <Ionicons name="checkmark" size={16} color={colors.green} />}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
       </Modal>
     </ScreenWrapper>
   );
@@ -607,6 +752,43 @@ const styles = StyleSheet.create({
   modalSaveText: {
     color: colors.screenBg,
     fontSize: fontSize.small,
+    fontWeight: '500',
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: colors.screenBg,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+    maxHeight: '70%',
+  },
+  pickerSheetTitle: {
+    fontSize: fontSize.h2,
+    fontWeight: '500',
+    color: colors.textPrimary,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
+  },
+  pickerOptionText: {
+    fontSize: fontSize.bodyLg,
+    color: colors.textPrimary,
+  },
+  pickerOptionTextActive: {
+    color: colors.green,
     fontWeight: '500',
   },
 });

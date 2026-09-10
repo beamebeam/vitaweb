@@ -772,7 +772,7 @@ export async function recalculateStockRemaining(medicineId) {
   return { stockTotal: totalAmount, stockRemaining };
 }
 
-export async function addNewStock(medicineId, amount, customStartDate) {
+export async function addNewStock(medicineId, amount, customStartDate, controlVisitId = null) {
   const userId = await getUserId();
   const medicine = await getMedicineById(medicineId);
   if (!medicine) return null;
@@ -788,6 +788,7 @@ export async function addNewStock(medicineId, amount, customStartDate) {
     amount: numericAmount,
     start_date: startDate,
     end_date_calculated: endDateCalculated,
+    control_visit_id: controlVisitId,
   }).select().single();
   if (error) throw error;
 
@@ -850,6 +851,59 @@ export async function deleteStockHistoryEntry(historyId) {
   const { error } = await supabase.from('stock_history').delete().eq('id', historyId);
   if (error) throw error;
   if (target) await recalculateStockRemaining(target.medicine_id);
+}
+
+// ============================================================
+// OBAT DITERIMA SAAT KONTROL - menandai botol obat mana yang didapat pada suatu kunjungan
+// kontrol tertentu (mis. "Kontrol tgl 10 dapat ARV botol ke-12"). Pengaturan obat itu sendiri
+// (nama, dosis, dst) tetap sepenuhnya di halaman Obat - ini cuma menautkan botol yang sudah
+// ada/baru dibuat ke kunjungan kontrolnya.
+// ============================================================
+
+// Menandai bahwa pada kontrol ini, user mendapat obat baru (botol baru) untuk suatu obat
+// yang SUDAH ADA di halaman Obat. Otomatis bikin botol baru + entri timeline, sama seperti
+// "Dapat obat baru" di halaman detail obat - bedanya di sini juga ditautkan ke kontrolnya.
+export async function addMedicineReceivedInVisit(visitId, medicineId, amount, startDate) {
+  return await addNewStock(medicineId, amount, startDate, visitId);
+}
+
+// Mengambil daftar obat yang ditandai "diterima" pada suatu kunjungan kontrol,
+// lengkap dengan nama & kategori obatnya (join ke tabel medicines).
+export async function getMedicinesReceivedForVisit(visitId) {
+  const { data, error } = await supabase
+    .from('stock_history')
+    .select('*, medicines(id, name, category)')
+    .eq('control_visit_id', visitId)
+    .order('start_date', { ascending: true });
+  if (error) throw error;
+  return (data || []).map((row) => ({
+    ...objToCamel(row),
+    medicine: row.medicines ? objToCamel(row.medicines) : null,
+  }));
+}
+
+// Melepas tanda "obat diterima" dari kontrol ini - botol/riwayat stoknya TETAP ada di halaman
+// Obat (tidak terhapus), cuma tidak lagi tertaut ke kunjungan kontrol manapun.
+export async function unlinkMedicineFromVisit(stockHistoryId) {
+  const { error } = await supabase.from('stock_history').update({ control_visit_id: null }).eq('id', stockHistoryId);
+  if (error) throw error;
+}
+
+// Mencari faskes yang terkait dengan suatu obat, berdasarkan botol obat itu yang PALING BARU
+// pernah ditandai "diterima saat kontrol X". Kalau tidak ada satupun botol yang tertaut ke
+// kontrol manapun, kembalikan null (artinya tidak perlu ditampilkan di halaman detail obat).
+export async function getLinkedFaskesForMedicine(medicineId) {
+  const { data, error } = await supabase
+    .from('stock_history')
+    .select('control_visits(faskes, visit_date)')
+    .eq('medicine_id', medicineId)
+    .not('control_visit_id', 'is', null)
+    .order('start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data?.control_visits?.faskes) return null;
+  return { faskes: data.control_visits.faskes, visitDate: data.control_visits.visit_date };
 }
 
 // ============================================================
