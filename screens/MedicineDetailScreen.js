@@ -17,6 +17,7 @@ import {
   updateStockHistoryEntry,
   deleteStockHistoryEntry,
   addManualMedicineLog,
+  addManualMedicineLogsBulk,
   markMedicineTaken,
   updateMedicineLog,
   deleteMedicineLog,
@@ -30,6 +31,53 @@ import {
   calculateMinutesDiff,
 } from '../utils/storage';
 import { rescheduleAllMedicineReminders } from '../utils/notifications';
+
+// ===== Helper untuk fitur "Catat banyak log minum sekaligus" =====
+
+// Mode B: hasilkan satu baris per tanggal dari rentang start..end (inklusif), jam sama semua.
+function generateDateRangeEntries(startDate, endDate, time) {
+  const entries = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) return entries;
+
+  const cur = new Date(start);
+  while (cur <= end) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, '0');
+    const d = String(cur.getDate()).padStart(2, '0');
+    entries.push({ date: `${y}-${m}-${d}`, time });
+    cur.setDate(cur.getDate() + 1);
+    if (entries.length > 1000) break; // pengaman - jangan sampai generate ribuan baris tak sengaja
+  }
+  return entries;
+}
+
+// Mode A: parse teks yang ditempel user, satu baris per catatan.
+// Format yang didukung per baris: "2024-01-15, 21:00" atau "2024-01-15 21:00" atau cuma
+// "2024-01-15" saja (jamnya otomatis pakai jam minum default obat).
+function parseBulkPasteText(text, defaultTime) {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const valid = [];
+  const invalidLineNumbers = [];
+
+  lines.forEach((line, idx) => {
+    const cleaned = line.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+    const [datePart, timePartRaw] = cleaned.split(' ');
+    const timePart = timePartRaw || defaultTime;
+
+    const dateOk = /^\d{4}-\d{2}-\d{2}$/.test(datePart || '') && !isNaN(new Date(datePart).getTime());
+    const timeOk = !!timePart && /^([01]\d|2[0-3]):([0-5]\d)$/.test(timePart);
+
+    if (dateOk && timeOk) {
+      valid.push({ date: datePart, time: timePart });
+    } else {
+      invalidLineNumbers.push(idx + 1);
+    }
+  });
+
+  return { valid, invalidLineNumbers };
+}
 
 function getKeteranganWaktu(log) {
   const diff = calculateMinutesDiff(log.scheduledTime, log.takenAtTime);
@@ -70,6 +118,14 @@ export default function MedicineDetailScreen({ route, navigation }) {
   const [showManualLog, setShowManualLog] = useState(false);
   const [manualDate, setManualDate] = useState(getTodayDateString());
   const [manualTime, setManualTime] = useState('');
+
+  const [showBulkLog, setShowBulkLog] = useState(false);
+  const [bulkMode, setBulkMode] = useState('range'); // 'range' | 'paste'
+  const [bulkStartDate, setBulkStartDate] = useState(getTodayDateString());
+  const [bulkEndDate, setBulkEndDate] = useState(getTodayDateString());
+  const [bulkTime, setBulkTime] = useState('');
+  const [bulkPasteText, setBulkPasteText] = useState('');
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const [editingLog, setEditingLog] = useState(null);
 
@@ -167,6 +223,78 @@ export default function MedicineDetailScreen({ route, navigation }) {
       await loadData();
     } catch (e) {
       Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
+  };
+
+  const handleOpenBulkLog = () => {
+    setBulkMode('range');
+    setBulkStartDate(getTodayDateString());
+    setBulkEndDate(getTodayDateString());
+    setBulkTime(medicine.scheduleTime || '21:00');
+    setBulkPasteText('');
+    setShowBulkLog(true);
+  };
+
+  const handleSaveBulkLog = async () => {
+    let entries = [];
+
+    if (bulkMode === 'range') {
+      if (!bulkStartDate || !bulkEndDate) {
+        Alert.alert('Tanggal kosong', 'Pilih tanggal mulai dan selesai.');
+        return;
+      }
+      if (!bulkTime) {
+        Alert.alert('Jam kosong', 'Pilih jam minum untuk rentang ini.');
+        return;
+      }
+      if (bulkEndDate < bulkStartDate) {
+        Alert.alert('Tanggal tidak valid', 'Tanggal selesai harus setelah tanggal mulai.');
+        return;
+      }
+      entries = generateDateRangeEntries(bulkStartDate, bulkEndDate, bulkTime);
+      if (entries.length === 0) {
+        Alert.alert('Rentang kosong', 'Tidak ada tanggal yang bisa dicatat dari rentang ini.');
+        return;
+      }
+    } else {
+      if (!bulkPasteText.trim()) {
+        Alert.alert('Teks kosong', 'Tempel dulu daftar tanggal & jamnya.');
+        return;
+      }
+      const { valid, invalidLineNumbers } = parseBulkPasteText(bulkPasteText, medicine.scheduleTime || '21:00');
+      if (valid.length === 0) {
+        Alert.alert('Tidak ada baris valid', 'Pastikan formatnya "2024-01-15, 21:00" satu baris per catatan.');
+        return;
+      }
+      if (invalidLineNumbers.length > 0) {
+        Alert.alert(
+          'Beberapa baris dilewati',
+          `Baris ${invalidLineNumbers.join(', ')} formatnya tidak dikenali dan dilewati. ${valid.length} baris lain akan tetap dicatat. Lanjutkan?`,
+          [
+            { text: 'Batal', style: 'cancel' },
+            { text: 'Lanjutkan', onPress: () => submitBulkEntries(valid) },
+          ]
+        );
+        return;
+      }
+      entries = valid;
+    }
+
+    await submitBulkEntries(entries);
+  };
+
+  const submitBulkEntries = async (entries) => {
+    setBulkSaving(true);
+    try {
+      const scheduledTime = bulkMode === 'range' ? bulkTime : (medicine.scheduleTime || null);
+      const count = await addManualMedicineLogsBulk(medicineId, scheduledTime, entries);
+      setShowBulkLog(false);
+      await loadData();
+      Alert.alert('Berhasil', `${count} log minum berhasil dicatat.`);
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -574,6 +702,12 @@ export default function MedicineDetailScreen({ route, navigation }) {
             </TouchableOpacity>
           )}
 
+          <TouchableOpacity style={styles.manageRow} onPress={handleOpenBulkLog}>
+            <Ionicons name="albums-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.manageRowText}>Catat banyak log minum sekaligus</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.manageRow, { borderBottomWidth: 0 }]}
             onPress={handleOpenDeleteConfirm}
@@ -681,6 +815,77 @@ export default function MedicineDetailScreen({ route, navigation }) {
                 <Text style={styles.modalSaveText}>Simpan</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: Catat banyak log minum sekaligus - untuk user baru yang sudah punya riwayat lama */}
+      <Modal visible={showBulkLog} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalBox, { maxHeight: '85%' }]}>
+            <ScrollView>
+              <Text style={styles.modalTitle}>Catat banyak sekaligus</Text>
+              <Text style={styles.modalSub}>
+                Cocok kalau kamu sudah lama minum obat ini sebelum pakai Vita, dan mau isi riwayatnya sekaligus.
+              </Text>
+
+              <View style={styles.bulkModeRow}>
+                <TouchableOpacity
+                  style={[styles.bulkModeTab, bulkMode === 'range' && styles.bulkModeTabActive]}
+                  onPress={() => setBulkMode('range')}
+                >
+                  <Text style={[styles.bulkModeTabText, bulkMode === 'range' && styles.bulkModeTabTextActive]}>
+                    Rentang tanggal
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.bulkModeTab, bulkMode === 'paste' && styles.bulkModeTabActive]}
+                  onPress={() => setBulkMode('paste')}
+                >
+                  <Text style={[styles.bulkModeTabText, bulkMode === 'paste' && styles.bulkModeTabTextActive]}>
+                    Tempel daftar
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {bulkMode === 'range' ? (
+                <>
+                  <Text style={styles.bulkHint}>
+                    Dipakai kalau jam minumnya SAMA setiap hari (misal ARV jam 21:00 tiap malam).
+                    Semua tanggal di rentang ini akan dicatat "tepat waktu" jam yang sama.
+                  </Text>
+                  <DatePickerField label="Dari tanggal" required value={bulkStartDate} onChange={setBulkStartDate} />
+                  <DatePickerField label="Sampai tanggal" required value={bulkEndDate} onChange={setBulkEndDate} />
+                  <TimePickerField label="Jam minum" required value={bulkTime} onChange={setBulkTime} />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.bulkHint}>
+                    Dipakai kalau jamnya beda-beda tiap hari. Tempel satu baris per catatan, format:{'\n'}
+                    <Text style={{ fontWeight: '600' }}>2024-01-15, 21:00</Text>{'\n'}
+                    (kalau jamnya dikosongkan, otomatis pakai jam minum obat ini)
+                  </Text>
+                  <TextInput
+                    style={[styles.modalInput, styles.bulkTextarea]}
+                    value={bulkPasteText}
+                    onChangeText={setBulkPasteText}
+                    placeholder={'2024-01-15, 21:00\n2024-01-16, 21:15\n2024-01-17'}
+                    placeholderTextColor={colors.textTertiary}
+                    multiline
+                    numberOfLines={8}
+                  />
+                </>
+              )}
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowBulkLog(false)} disabled={bulkSaving}>
+                  <Text style={styles.modalCancelText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveBulkLog} disabled={bulkSaving}>
+                  <Text style={styles.modalSaveText}>{bulkSaving ? 'Menyimpan...' : 'Simpan Semua'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -1070,5 +1275,40 @@ const styles = StyleSheet.create({
   deleteBottleBtnText: {
     fontSize: fontSize.small,
     color: colors.red,
+  },
+  bulkModeRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    backgroundColor: colors.cardBg,
+    borderRadius: radius.md,
+    padding: 3,
+    marginBottom: spacing.md,
+  },
+  bulkModeTab: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+  },
+  bulkModeTabActive: {
+    backgroundColor: colors.cardBgWhite,
+  },
+  bulkModeTabText: {
+    fontSize: fontSize.small,
+    color: colors.textSecondary,
+  },
+  bulkModeTabTextActive: {
+    color: colors.green,
+    fontWeight: '600',
+  },
+  bulkHint: {
+    fontSize: fontSize.caption,
+    color: colors.textSecondary,
+    lineHeight: 17,
+    marginBottom: spacing.md,
+  },
+  bulkTextarea: {
+    minHeight: 160,
+    textAlignVertical: 'top',
   },
 });

@@ -668,6 +668,43 @@ export async function addManualMedicineLog(medicineId, scheduledTime, dateString
   return await markMedicineTaken(medicineId, scheduledTime, { dateString, takenAtTime });
 }
 
+// Mencatat BANYAK log minum sekaligus dalam satu kali proses - dipakai fitur "Catat banyak
+// sekaligus" di halaman detail obat. Cocok untuk user baru yang sudah punya riwayat lama
+// (mis. sudah minum ARV bertahun-tahun sebelum pakai Vita).
+// entries: array berisi { date: 'YYYY-MM-DD', time: 'HH:MM' }
+// Beda dengan addManualMedicineLog (satu-satu), ini mengambil data botol SEKALI SAJA lalu
+// dipakai ulang untuk menghitung bottleNumber tiap baris, dan insert ke database dalam
+// beberapa batch besar - jauh lebih cepat dibanding memanggil berkali-kali satu per satu.
+export async function addManualMedicineLogsBulk(medicineId, scheduledTime, entries) {
+  if (!entries || entries.length === 0) return 0;
+  const userId = await getUserId();
+  const bottles = await getStockHistoryForMedicine(medicineId);
+
+  const rows = entries.map((entry) => {
+    const status = calculateLogStatus(scheduledTime, entry.time);
+    const matchedBottle = bottles.find((b) => entry.date >= b.startDate && entry.date <= b.endDateCalculated) || null;
+    return {
+      user_id: userId,
+      medicine_id: medicineId,
+      date: entry.date,
+      scheduled_time: scheduledTime,
+      taken_at_time: entry.time,
+      status,
+      bottle_number: matchedBottle ? matchedBottle.bottleNumber : null,
+    };
+  });
+
+  const CHUNK_SIZE = 200;
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + CHUNK_SIZE);
+    const { error } = await supabase.from('medicine_logs').insert(chunk);
+    if (error) throw error;
+  }
+
+  await recalculateStockRemaining(medicineId);
+  return rows.length;
+}
+
 export async function getLogsForBottle(medicineId, bottleNumber) {
   const { data, error } = await supabase
     .from('medicine_logs')
