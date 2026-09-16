@@ -18,6 +18,9 @@ import {
   verifyPinCode,
   signOutUser,
   getSession,
+  addEmergencyContact,
+  updateEmergencyContact,
+  deleteEmergencyContact,
 } from '../utils/storage';
 import PinSetupModal from './PinSetupModal';
 import {
@@ -40,8 +43,10 @@ export default function SettingsScreen({ navigation }) {
   const [faskesInput, setFaskesInput] = useState('');
   const [faskesMapsUrlInput, setFaskesMapsUrlInput] = useState('');
 
-  const [showEditEmergency, setShowEditEmergency] = useState(false);
-  const [emergencyInput, setEmergencyInput] = useState('');
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false);
+  const [editingContactId, setEditingContactId] = useState(null); // null = tambah baru
+  const [contactNameInput, setContactNameInput] = useState('');
+  const [contactPhoneInput, setContactPhoneInput] = useState('');
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearConfirmInput, setClearConfirmInput] = useState('');
@@ -106,19 +111,58 @@ export default function SettingsScreen({ navigation }) {
     }
   };
 
-  const handleOpenEditEmergency = () => {
-    setEmergencyInput(profile?.emergencyContact || '');
-    setShowEditEmergency(true);
+  const handleOpenAddContact = () => {
+    if ((profile?.emergencyContacts || []).length >= 3) {
+      Alert.alert('Sudah maksimal', 'Maksimal 3 kontak darurat. Hapus salah satu dulu kalau mau ganti.');
+      return;
+    }
+    setEditingContactId(null);
+    setContactNameInput('');
+    setContactPhoneInput('');
+    setShowEmergencyForm(true);
   };
 
-  const handleSaveEmergency = async () => {
+  const handleOpenEditContact = (contact) => {
+    setEditingContactId(contact.id);
+    setContactNameInput(contact.name || '');
+    setContactPhoneInput(contact.phone || '');
+    setShowEmergencyForm(true);
+  };
+
+  const handleSaveContact = async () => {
+    if (!contactPhoneInput.trim()) {
+      Alert.alert('Nomor kosong', 'Mohon isi nomor telepon.');
+      return;
+    }
     try {
-      await saveProfile({ emergencyContact: emergencyInput.trim() });
-      setShowEditEmergency(false);
+      if (editingContactId) {
+        await updateEmergencyContact(editingContactId, { name: contactNameInput.trim(), phone: contactPhoneInput.trim() });
+      } else {
+        await addEmergencyContact({ name: contactNameInput.trim(), phone: contactPhoneInput.trim() });
+      }
+      setShowEmergencyForm(false);
       await loadData();
     } catch (e) {
       Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
     }
+  };
+
+  const handleDeleteContact = (contact) => {
+    Alert.alert('Hapus kontak ini?', `"${contact.name || contact.phone}" akan dihapus dari daftar kontak darurat.`, [
+      { text: 'Batal', style: 'cancel' },
+      {
+        text: 'Hapus',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteEmergencyContact(contact.id);
+            await loadData();
+          } catch (e) {
+            Alert.alert('Gagal menghapus', e.message || 'Terjadi kesalahan, coba lagi.');
+          }
+        },
+      },
+    ]);
   };
 
   // Toggle PIN: kalau mau AKTIFKAN -> buka setup PIN baru.
@@ -345,16 +389,51 @@ export default function SettingsScreen({ navigation }) {
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.row, { borderBottomWidth: 0 }]} onPress={handleOpenEditEmergency}>
-            <View style={[styles.rowIcon, { backgroundColor: colors.redBg }]}>
-              <Ionicons name="call-outline" size={16} color={colors.red} />
-            </View>
-            <View style={styles.rowBody}>
-              <Text style={styles.rowTitle}>Nomor darurat</Text>
-              <Text style={styles.rowSub}>{profile?.emergencyContact || 'Belum diatur'}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
-          </TouchableOpacity>
+
+          {(profile?.emergencyContacts || []).length === 0 && (
+            <TouchableOpacity style={[styles.row, { borderBottomWidth: 0 }]} onPress={handleOpenAddContact}>
+              <View style={[styles.rowIcon, { backgroundColor: colors.redBg }]}>
+                <Ionicons name="call-outline" size={16} color={colors.red} />
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.rowTitle}>Kontak darurat</Text>
+                <Text style={styles.rowSub}>Belum diatur - ketuk untuk tambah</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+            </TouchableOpacity>
+          )}
+
+          {(profile?.emergencyContacts || []).map((contact, idx, arr) => (
+            <TouchableOpacity
+              key={contact.id}
+              style={[styles.row, idx === arr.length - 1 && arr.length >= 3 && { borderBottomWidth: 0 }]}
+              onPress={() => handleOpenEditContact(contact)}
+            >
+              <View style={[styles.rowIcon, { backgroundColor: colors.redBg }]}>
+                <Ionicons name="call-outline" size={16} color={colors.red} />
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.rowTitle}>{contact.name || 'Kontak darurat'}</Text>
+                <Text style={styles.rowSub}>{contact.phone}</Text>
+              </View>
+              <TouchableOpacity onPress={() => handleDeleteContact(contact)} style={{ padding: 4, marginRight: 2 }}>
+                <Ionicons name="trash-outline" size={15} color={colors.textTertiary} />
+              </TouchableOpacity>
+              <Ionicons name="pencil-outline" size={15} color={colors.textTertiary} />
+            </TouchableOpacity>
+          ))}
+
+          {(profile?.emergencyContacts || []).length > 0 && (profile?.emergencyContacts || []).length < 3 && (
+            <TouchableOpacity style={[styles.row, { borderBottomWidth: 0 }]} onPress={handleOpenAddContact}>
+              <View style={[styles.rowIcon, { backgroundColor: colors.cardBg }]}>
+                <Ionicons name="add" size={16} color={colors.textSecondary} />
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.rowTitle}>Tambah kontak darurat</Text>
+                <Text style={styles.rowSub}>{(profile?.emergencyContacts || []).length}/3 kontak</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
 
         <Text style={styles.sectionHeading}>Notifikasi</Text>
@@ -526,24 +605,33 @@ export default function SettingsScreen({ navigation }) {
         </View>
       </Modal>
 
-      <Modal visible={showEditEmergency} transparent animationType="fade">
+      <Modal visible={showEmergencyForm} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Ubah nomor darurat</Text>
-            <Text style={styles.modalSub}>Nomor kontak yang bisa dihubungi saat keadaan darurat (keluarga, teman dekat, atau faskes).</Text>
+            <Text style={styles.modalTitle}>{editingContactId ? 'Ubah kontak darurat' : 'Tambah kontak darurat'}</Text>
+            <Text style={styles.modalSub}>Kontak yang bisa dihubungi saat keadaan darurat (keluarga, teman dekat, atau faskes).</Text>
+            <Text style={styles.modalFieldLabelSmall}>Nama</Text>
             <TextInput
               style={styles.modalInput}
-              value={emergencyInput}
-              onChangeText={setEmergencyInput}
+              value={contactNameInput}
+              onChangeText={setContactNameInput}
+              placeholder="Contoh: Ibu, Kak Rina, dr. Santika"
+              placeholderTextColor={colors.textTertiary}
+            />
+            <Text style={styles.modalFieldLabelSmall}>Nomor telepon</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={contactPhoneInput}
+              onChangeText={setContactPhoneInput}
               placeholder="Contoh: 0812-3456-7890"
               placeholderTextColor={colors.textTertiary}
               keyboardType="phone-pad"
             />
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowEditEmergency(false)}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowEmergencyForm(false)}>
                 <Text style={styles.modalCancelText}>Batal</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveEmergency}>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveContact}>
                 <Text style={styles.modalSaveText}>Simpan</Text>
               </TouchableOpacity>
             </View>

@@ -31,6 +31,14 @@ function getSapaan(nickname) {
 
 const STOCK_WARNING_THRESHOLD = 5;
 
+// Ubah nomor telepon lokal (0812..., +62812..., dst) jadi format yang dipahami wa.me
+function buildWaLink(phone) {
+  let digits = (phone || '').replace(/[^0-9]/g, '');
+  if (digits.startsWith('0')) digits = '62' + digits.slice(1);
+  else if (!digits.startsWith('62')) digits = '62' + digits;
+  return `https://wa.me/${digits}`;
+}
+
 export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [medicines, setMedicines] = useState([]);
@@ -38,6 +46,7 @@ export default function HomeScreen({ navigation }) {
   const [upcomingVisit, setUpcomingVisit] = useState(null);
   const [profile, setProfile] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null); // { medicine, jamInput }
+  const [showContactPicker, setShowContactPicker] = useState(false);
 
   const todayString = getTodayDateString();
 
@@ -85,6 +94,19 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const handleEmergencyPress = () => {
+    if (emergencyContacts.length === 1) {
+      Linking.openURL(buildWaLink(emergencyContacts[0].phone)).catch(() => {});
+    } else {
+      setShowContactPicker(true);
+    }
+  };
+
+  const handleOpenWaForContact = (contact) => {
+    setShowContactPicker(false);
+    Linking.openURL(buildWaLink(contact.phone)).catch(() => {});
+  };
+
   const handleConfirmTaken = async () => {
     if (!confirmModal) return;
     const { medicine, jamInput } = confirmModal;
@@ -121,6 +143,7 @@ export default function HomeScreen({ navigation }) {
     : 0;
 
   const arvMedicines = medicines.filter((m) => m.category === 'ARV');
+  const emergencyContacts = profile?.emergencyContacts || [];
   // Safety clamp: jika ada data lama yang sempat korup (stockRemaining > stockTotal akibat bug lama),
   // jangan tampilkan angka yang membingungkan - batasi maksimal sebesar stockTotal-nya sendiri
   const stokArv = arvMedicines.reduce((sum, m) => sum + Math.min(m.stockRemaining ?? 0, m.stockTotal ?? 0), 0);
@@ -147,16 +170,24 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        {/* Tombol aksi cepat - baru muncul kalau ada link Maps faskes yang diisi di Pengaturan */}
-        {!!profile?.faskesMapsUrl && (
+        {/* Tombol aksi cepat - baru muncul kalau ada link Maps faskes / kontak darurat yang diisi di Pengaturan */}
+        {(!!profile?.faskesMapsUrl || emergencyContacts.length > 0) && (
           <View style={styles.quickActionsRow}>
-            <TouchableOpacity
-              style={styles.quickPillButton}
-              onPress={() => Linking.openURL(profile.faskesMapsUrl).catch(() => {})}
-            >
-              <Ionicons name="location-outline" size={15} color={colors.green} />
-              <Text style={styles.quickPillButtonText}>Buka Google Maps Faskes</Text>
-            </TouchableOpacity>
+            {!!profile?.faskesMapsUrl && (
+              <TouchableOpacity
+                style={styles.quickPillButton}
+                onPress={() => Linking.openURL(profile.faskesMapsUrl).catch(() => {})}
+              >
+                <Ionicons name="location-outline" size={15} color={colors.green} />
+                <Text style={styles.quickPillButtonText}>Buka Google Maps Faskes</Text>
+              </TouchableOpacity>
+            )}
+            {emergencyContacts.length > 0 && (
+              <TouchableOpacity style={styles.quickPillButtonDanger} onPress={handleEmergencyPress}>
+                <Ionicons name="logo-whatsapp" size={15} color={colors.red} />
+                <Text style={styles.quickPillButtonDangerText}>Hubungi Darurat</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -341,6 +372,27 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={showContactPicker} transparent animationType="slide">
+        <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setShowContactPicker(false)}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerSheetTitle}>Hubungi siapa?</Text>
+            {emergencyContacts.map((contact) => (
+              <TouchableOpacity
+                key={contact.id}
+                style={styles.pickerOption}
+                onPress={() => handleOpenWaForContact(contact)}
+              >
+                <View>
+                  <Text style={styles.pickerOptionText}>{contact.name || 'Kontak darurat'}</Text>
+                  <Text style={styles.pickerOptionSub}>{contact.phone}</Text>
+                </View>
+                <Ionicons name="logo-whatsapp" size={18} color={colors.red} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </ScreenWrapper>
   );
 }
@@ -400,6 +452,58 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     fontWeight: '500',
     color: colors.green,
+  },
+  quickPillButtonDanger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.redBg,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 8,
+  },
+  quickPillButtonDangerText: {
+    fontSize: fontSize.caption,
+    fontWeight: '500',
+    color: colors.red,
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  pickerSheet: {
+    backgroundColor: colors.screenBg,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xl,
+    maxHeight: '70%',
+  },
+  pickerSheetTitle: {
+    fontSize: fontSize.h2,
+    fontWeight: '500',
+    color: colors.textPrimary,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  pickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
+  },
+  pickerOptionText: {
+    fontSize: fontSize.bodyLg,
+    color: colors.textPrimary,
+  },
+  pickerOptionSub: {
+    fontSize: fontSize.caption,
+    color: colors.textTertiary,
+    marginTop: 1,
   },
   warningBanner: {
     flexDirection: 'row',

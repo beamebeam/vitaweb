@@ -148,6 +148,33 @@ export async function markOnboardingCompleted() {
 }
 
 // ============================================================
+// KONTAK DARURAT (maksimal 3, masing-masing punya nama + nomor)
+// ============================================================
+export async function addEmergencyContact({ name, phone }) {
+  const profile = await getProfile();
+  const contacts = profile?.emergencyContacts || [];
+  if (contacts.length >= 3) {
+    throw new Error('Maksimal 3 kontak darurat.');
+  }
+  const updated = [...contacts, { id: generateId(), name: name || '', phone: phone || '' }];
+  return await saveProfile({ emergencyContacts: updated });
+}
+
+export async function updateEmergencyContact(contactId, updates) {
+  const profile = await getProfile();
+  const contacts = (profile?.emergencyContacts || []).map((c) =>
+    c.id === contactId ? { ...c, ...updates } : c
+  );
+  return await saveProfile({ emergencyContacts: contacts });
+}
+
+export async function deleteEmergencyContact(contactId) {
+  const profile = await getProfile();
+  const contacts = (profile?.emergencyContacts || []).filter((c) => c.id !== contactId);
+  return await saveProfile({ emergencyContacts: contacts });
+}
+
+// ============================================================
 // PIN KEAMANAN (kunci lokal tambahan, terpisah dari login akun)
 // ============================================================
 export async function isPinEnabled() {
