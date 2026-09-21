@@ -18,6 +18,7 @@ import {
   verifyPinCode,
   signOutUser,
   getSession,
+  requestPinResetEmail,
   addEmergencyContact,
   updateEmergencyContact,
   deleteEmergencyContact,
@@ -200,6 +201,22 @@ export default function SettingsScreen({ navigation }) {
       }
     } catch (e) {
       Alert.alert('Gagal', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
+  };
+
+  const handleForgotPinFromSettings = async () => {
+    try {
+      const session = await getSession();
+      const email = session?.user?.email;
+      if (!email) {
+        Alert.alert('Gagal', 'Tidak bisa menemukan email akunmu.');
+        return;
+      }
+      setShowPinVerify(false);
+      await requestPinResetEmail(email);
+      Alert.alert('Cek email kamu', `Link untuk membuat PIN baru sudah dikirim ke ${email}.`);
+    } catch (e) {
+      Alert.alert('Gagal mengirim email', e.message || 'Terjadi kesalahan, coba lagi.');
     }
   };
 
@@ -521,12 +538,17 @@ export default function SettingsScreen({ navigation }) {
         <Text style={styles.sectionHeading}>Tentang</Text>
         <View style={styles.sectionCard}>
           <View style={[styles.row, { borderBottomWidth: 0 }]}>
-            <View style={[styles.rowIcon, { backgroundColor: colors.cardBg }]}>
-              <Ionicons name="lock-closed-outline" size={16} color={colors.textSecondary} />
+            <View style={[styles.rowIcon, { backgroundColor: colors.greenBg }]}>
+              <Ionicons name="heart-outline" size={16} color={colors.green} />
             </View>
             <View style={styles.rowBody}>
-              <Text style={styles.rowTitle}>Privasi</Text>
-              <Text style={styles.rowSub}>Data tersimpan aman di akunmu (Supabase) dan dilindungi lewat login - pengguna lain tidak bisa melihat datamu.</Text>
+              <Text style={styles.rowTitle}>Tentang Vita</Text>
+              <Text style={styles.rowSub}>
+                Vita dibuat sebagai teman sehari-hari untuk teman-teman ODHIV - membantu menjaga
+                kepatuhan minum ARV, mengingat jadwal kontrol, dan mencatat perjalanan kesehatan
+                dengan tenang dan privat. Setiap data tersimpan aman di akunmu sendiri dan tidak
+                bisa dilihat siapa pun selain kamu.
+              </Text>
             </View>
           </View>
         </View>
@@ -747,6 +769,9 @@ export default function SettingsScreen({ navigation }) {
               secureTextEntry
               maxLength={6}
             />
+            <TouchableOpacity onPress={handleForgotPinFromSettings} style={{ marginBottom: spacing.md }}>
+              <Text style={styles.linkText}>Lupa PIN?</Text>
+            </TouchableOpacity>
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowPinVerify(false)}>
                 <Text style={styles.modalCancelText}>Batal</Text>
@@ -771,7 +796,7 @@ export default function SettingsScreen({ navigation }) {
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
   },
   headerTitle: {
     fontSize: fontSize.h1 - 4,
@@ -891,6 +916,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     color: colors.textSecondary,
     marginBottom: spacing.xs,
+  },
+  linkText: {
+    fontSize: fontSize.caption,
+    color: colors.green,
+    fontWeight: '500',
   },
   modalButtons: {
     flexDirection: 'row',

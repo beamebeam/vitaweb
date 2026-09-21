@@ -34,6 +34,7 @@ export default function AddMedicineScreen({ navigation, route }) {
   const [stockStartDate, setStockStartDate] = useState(getTodayDateString());
   const [endDate, setEndDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [lowStockThreshold, setLowStockThreshold] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEditMode);
 
@@ -53,6 +54,7 @@ export default function AddMedicineScreen({ navigation, route }) {
         setStockTotal(String(med.stockTotal ?? 30));
         setEndDate(med.endDate || '');
         setNotes(med.notes || '');
+        setLowStockThreshold(med.lowStockThreshold != null ? String(med.lowStockThreshold) : '');
       }
       setLoading(false);
     })();
@@ -102,6 +104,7 @@ export default function AddMedicineScreen({ navigation, route }) {
           frequencyUnit,
           endDate: category === 'temporer' ? endDate : null,
           notes: notes.trim(),
+          lowStockThreshold: lowStockThreshold.trim() ? parseFloat(lowStockThreshold) : null,
         });
         // Catatan: stockTotal TIDAK diubah lewat form edit ini, karena perubahan stok
         // punya alur khusus lewat "+ Dapat obat baru" agar riwayat botol tetap akurat
@@ -117,6 +120,7 @@ export default function AddMedicineScreen({ navigation, route }) {
           stockStartDate: stockStartDate || getTodayDateString(),
           endDate: category === 'temporer' ? endDate : null,
           notes: notes.trim(),
+          lowStockThreshold: lowStockThreshold.trim() ? parseFloat(lowStockThreshold) : null,
         });
       }
       // Jadwalkan ulang notifikasi - dibungkus try-catch tersendiri supaya kalau gagal
@@ -301,6 +305,22 @@ export default function AddMedicineScreen({ navigation, route }) {
         )}
 
         <View style={styles.field}>
+          <FieldLabel>Ingatkan kalau obat segera habis (opsional)</FieldLabel>
+          <TextInput
+            style={styles.input}
+            value={lowStockThreshold}
+            onChangeText={setLowStockThreshold}
+            keyboardType="numeric"
+            placeholder={category === 'ARV' ? 'Default: 5 tablet' : 'Contoh: 10'}
+            placeholderTextColor={colors.textTertiary}
+          />
+          <Text style={styles.fieldHintBelow}>
+            Muncul peringatan "Obat segera habis" di halaman detail obat kalau stok tersisa
+            sudah di angka ini atau kurang. Kosongkan kalau tidak perlu diingatkan.
+          </Text>
+        </View>
+
+        <View style={styles.field}>
           <FieldLabel>Catatan (opsional)</FieldLabel>
           <TextInput
             style={[styles.input, styles.textarea]}
@@ -325,7 +345,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
     borderBottomWidth: 0.5,
     borderBottomColor: colors.border,
   },

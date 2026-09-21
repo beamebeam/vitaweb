@@ -8,12 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from './utils/theme';
 import { useIsDesktop } from './utils/responsive';
-import { isOnboardingCompleted, isPinEnabled, getProfile, getSession, subscribeAuthChanges } from './utils/storage';
+import { isOnboardingCompleted, isPinEnabled, getProfile, getSession, subscribeAuthChanges, setPinCode, signOutUser } from './utils/storage';
 import { rescheduleAllMedicineReminders, rescheduleControlReminder } from './utils/notifications';
 
 import SidebarNav from './components/SidebarNav';
 import AuthScreen from './screens/AuthScreen';
 import PinLockScreen from './screens/PinLockScreen';
+import PinSetupModal from './screens/PinSetupModal';
 import HomeScreen from './screens/HomeScreen';
 import MedicineListScreen from './screens/MedicineListScreen';
 import AddMedicineScreen from './screens/AddMedicineScreen';
@@ -100,6 +101,7 @@ export default function App() {
   const [onboardingDone, setOnboardingDone] = useState(false);
   const [pinRequired, setPinRequired] = useState(false);
   const [pinUnlocked, setPinUnlocked] = useState(false);
+  const [pinRecoveryMode, setPinRecoveryMode] = useState(false);
 
   const checkOnboarding = useCallback(async () => {
     const done = await isOnboardingCompleted();
@@ -143,8 +145,13 @@ export default function App() {
       }
     })();
 
-    const subscription = subscribeAuthChanges((newSession) => {
+    const subscription = subscribeAuthChanges((newSession, event) => {
       setSession(newSession);
+      if (event === 'PASSWORD_RECOVERY') {
+        // User baru saja klik link "Lupa PIN" dari email -> minta buat PIN baru
+        setPinRecoveryMode(true);
+        return;
+      }
       if (newSession) {
         checkOnboarding().catch((e) => console.log('Gagal cek onboarding:', e));
       } else {
@@ -152,6 +159,7 @@ export default function App() {
         setOnboardingDone(false);
         setPinRequired(false);
         setPinUnlocked(false);
+        setPinRecoveryMode(false);
       }
     });
 
@@ -190,9 +198,33 @@ export default function App() {
 
   // Layar kunci PIN muncul di atas semua tab kalau PIN aktif dan belum di-unlock di sesi ini
   if (pinRequired && !pinUnlocked) {
+    // User baru klik link "Lupa PIN" dari email -> langsung minta buat PIN baru, bukan minta PIN lama
+    if (pinRecoveryMode) {
+      return (
+        <SafeAreaProvider>
+          <View style={{ flex: 1, backgroundColor: colors.green }} />
+          <PinSetupModal
+            visible
+            onClose={async () => {
+              // Tidak ada PIN lama yang valid untuk kembali - paling aman langsung keluarkan akun
+              setPinRecoveryMode(false);
+              await signOutUser();
+            }}
+            onComplete={async (newPin) => {
+              await setPinCode(newPin);
+              setPinRecoveryMode(false);
+              setPinUnlocked(true);
+            }}
+          />
+        </SafeAreaProvider>
+      );
+    }
     return (
       <SafeAreaProvider>
-        <PinLockScreen onUnlock={() => setPinUnlocked(true)} />
+        <PinLockScreen
+          onUnlock={() => setPinUnlocked(true)}
+          onLogout={() => signOutUser()}
+        />
       </SafeAreaProvider>
     );
   }

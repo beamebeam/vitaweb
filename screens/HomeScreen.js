@@ -144,13 +144,37 @@ export default function HomeScreen({ navigation }) {
 
   const arvMedicines = medicines.filter((m) => m.category === 'ARV');
   const emergencyContacts = profile?.emergencyContacts || [];
+
+  // Menu grid di beranda - data-driven supaya gampang nambah item baru ke depannya,
+  // tinggal push objek { key, icon, label, bg, color, onPress } ke array ini.
+  const menuItems = [];
+  if (profile?.faskesMapsUrl) {
+    menuItems.push({
+      key: 'faskes',
+      icon: 'location-outline',
+      label: 'Lokasi Faskes',
+      bg: colors.greenBg,
+      color: colors.green,
+      onPress: () => Linking.openURL(profile.faskesMapsUrl).catch(() => {}),
+    });
+  }
+  if (emergencyContacts.length > 0) {
+    menuItems.push({
+      key: 'emergency',
+      icon: 'call-outline',
+      label: 'Nomor Darurat',
+      bg: colors.redBg,
+      color: colors.red,
+      onPress: handleEmergencyPress,
+    });
+  }
   // Safety clamp: jika ada data lama yang sempat korup (stockRemaining > stockTotal akibat bug lama),
   // jangan tampilkan angka yang membingungkan - batasi maksimal sebesar stockTotal-nya sendiri
   const stokArv = arvMedicines.reduce((sum, m) => sum + Math.min(m.stockRemaining ?? 0, m.stockTotal ?? 0), 0);
   const stokArvTotal = arvMedicines.reduce((sum, m) => sum + (m.stockTotal ?? 0), 0);
   // Warning aktif kalau SALAH SATU obat ARV sudah di bawah ambang batas
-  const stokMenipis = arvMedicines.some((m) => m.stockRemaining <= STOCK_WARNING_THRESHOLD);
-  const arvStokMenipisList = arvMedicines.filter((m) => m.stockRemaining <= STOCK_WARNING_THRESHOLD);
+  const stokMenipis = arvMedicines.some((m) => m.stockRemaining <= (m.lowStockThreshold ?? STOCK_WARNING_THRESHOLD));
+  const arvStokMenipisList = arvMedicines.filter((m) => m.stockRemaining <= (m.lowStockThreshold ?? STOCK_WARNING_THRESHOLD));
 
   const isKontrolTerlambat = upcomingVisit?.status === 'terlambat';
   const isKontrolHariIni = upcomingVisit?.status === 'hari_ini';
@@ -169,27 +193,6 @@ export default function HomeScreen({ navigation }) {
             <Ionicons name="notifications-outline" size={18} color={colors.green} />
           </TouchableOpacity>
         </View>
-
-        {/* Tombol aksi cepat - baru muncul kalau ada link Maps faskes / kontak darurat yang diisi di Pengaturan */}
-        {(!!profile?.faskesMapsUrl || emergencyContacts.length > 0) && (
-          <View style={styles.quickActionsRow}>
-            {!!profile?.faskesMapsUrl && (
-              <TouchableOpacity
-                style={styles.quickPillButton}
-                onPress={() => Linking.openURL(profile.faskesMapsUrl).catch(() => {})}
-              >
-                <Ionicons name="location-outline" size={15} color={colors.green} />
-                <Text style={styles.quickPillButtonText}>Buka Google Maps Faskes</Text>
-              </TouchableOpacity>
-            )}
-            {emergencyContacts.length > 0 && (
-              <TouchableOpacity style={styles.quickPillButtonDanger} onPress={handleEmergencyPress}>
-                <Ionicons name="logo-whatsapp" size={15} color={colors.red} />
-                <Text style={styles.quickPillButtonDangerText}>Hubungi Darurat</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
 
         {/* Warning stok ARV menipis - hanya muncul kalau <= 5 tablet */}
         {stokMenipis && (
@@ -345,6 +348,24 @@ export default function HomeScreen({ navigation }) {
           );
         })()}
 
+        {/* Menu tambahan berbentuk grid ikon - baru muncul kalau ada item yang tersedia.
+            Ke depannya kalau ada fitur baru, tinggal tambah objek ke array menuItems. */}
+        {menuItems.length > 0 && (
+          <>
+            <Text style={[styles.sectionHeading, { marginTop: spacing.lg }]}>Menu</Text>
+            <View style={styles.menuGrid}>
+              {menuItems.map((item) => (
+                <TouchableOpacity key={item.key} style={styles.menuGridItem} onPress={item.onPress}>
+                  <View style={[styles.menuGridIcon, { backgroundColor: item.bg }]}>
+                    <Ionicons name={item.icon} size={20} color={item.color} />
+                  </View>
+                  <Text style={styles.menuGridLabel} numberOfLines={2}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
       </ScrollView>
 
       <Modal visible={!!confirmModal} transparent animationType="fade">
@@ -413,7 +434,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: spacing.lg + 4,
   },
   dateText: {
     fontSize: fontSize.caption,
@@ -433,39 +454,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  quickActionsRow: {
+  menuGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+  },
+  menuGridItem: {
+    width: '25%',
+    alignItems: 'center',
     marginBottom: spacing.md,
+    paddingHorizontal: 4,
   },
-  quickPillButton: {
-    flexDirection: 'row',
+  menuGridIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.lg,
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.greenBg,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    marginBottom: 6,
   },
-  quickPillButtonText: {
-    fontSize: fontSize.caption,
-    fontWeight: '500',
-    color: colors.green,
-  },
-  quickPillButtonDanger: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.redBg,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
-  },
-  quickPillButtonDangerText: {
-    fontSize: fontSize.caption,
-    fontWeight: '500',
-    color: colors.red,
+  menuGridLabel: {
+    fontSize: fontSize.caption - 1,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 14,
   },
   pickerOverlay: {
     flex: 1,

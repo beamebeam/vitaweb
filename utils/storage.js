@@ -69,9 +69,19 @@ export async function resetPasswordForEmail(email) {
 }
 
 // callback(session | null) dipanggil setiap kali status login berubah
+// callback(session | null, event) dipanggil setiap kali status login berubah. `event` berguna
+// untuk mendeteksi kejadian khusus, misal 'PASSWORD_RECOVERY' saat user klik link lupa PIN/password dari email.
 export function subscribeAuthChanges(callback) {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => callback(session));
+  const { data } = supabase.auth.onAuthStateChange((event, session) => callback(session, event));
   return data.subscription;
+}
+
+// Mengirim email berisi link untuk reset PIN (memanfaatkan mekanisme "lupa password" Supabase -
+// begitu link diklik, sesi baru akan aktif dengan event PASSWORD_RECOVERY, lalu App.js akan
+// otomatis menampilkan layar "Buat PIN baru").
+export async function requestPinResetEmail(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error) throw error;
 }
 
 // ===== Format tanggal helper (murni JS, tidak berubah) =====

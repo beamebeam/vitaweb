@@ -468,7 +468,11 @@ export default function MedicineDetailScreen({ route, navigation }) {
   const stockRemaining = medicine.stockRemaining ?? 0;
   const stockTotal = medicine.stockTotal ?? 0;
   const percent = stockTotal > 0 ? Math.min(100, Math.max(0, (stockRemaining / stockTotal) * 100)) : 0;
-  const isStockLow = stockRemaining <= 5;
+  // ARV punya default batas peringatan 5 tablet kalau tidak diisi manual; kategori lain
+  // opsional - tidak ada peringatan sama sekali kalau usernya tidak mengisi angka batasnya.
+  const defaultThreshold = medicine.category === 'ARV' ? 5 : null;
+  const lowStockThreshold = medicine.lowStockThreshold != null ? medicine.lowStockThreshold : defaultThreshold;
+  const isStockLow = lowStockThreshold != null && stockRemaining <= lowStockThreshold;
 
   // Botol yang sedang berjalan = botol terakhir berdasarkan urutan tanggal (yang paling baru dimulai)
   const currentBottle = stockHistory[stockHistory.length - 1];
@@ -500,10 +504,16 @@ export default function MedicineDetailScreen({ route, navigation }) {
           <InfoRow
             label="Dosis"
             value={formatDoseText(medicine.doseAmount, medicine.frequencyUnit)}
-            last={!linkedFaskes && !medicine.notes}
+            last={!linkedFaskes && !isStockLow && !medicine.notes}
           />
           {linkedFaskes && (
-            <InfoRow label="Faskes" value={linkedFaskes.faskes} last={!medicine.notes} />
+            <InfoRow label="Faskes" value={linkedFaskes.faskes} last={!medicine.notes && !isStockLow} />
+          )}
+          {isStockLow && (
+            <View style={[styles.lowStockNotice, (!medicine.notes) && { borderBottomWidth: 0 }]}>
+              <Ionicons name="alert-circle-outline" size={14} color={colors.red} />
+              <Text style={styles.lowStockNoticeText}>Obat segera habis</Text>
+            </View>
           )}
           {medicine.notes ? (
             <View style={styles.notesBox}>
@@ -527,17 +537,17 @@ export default function MedicineDetailScreen({ route, navigation }) {
                   </Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[styles.stockBigValue, { color: isStockLow ? colors.red : colors.textPrimary }]}>
+                  <Text style={styles.stockBigValue}>
                     {stockRemaining}/{stockTotal}
                   </Text>
-                  <Text style={[styles.miniLabel, isStockLow && { color: colors.red }]}>total tablet tersisa</Text>
+                  <Text style={styles.miniLabel}>total tablet tersisa</Text>
                 </View>
               </View>
               <View style={styles.progressBg}>
                 <View
                   style={[
                     styles.progressFill,
-                    { width: `${percent}%`, backgroundColor: isStockLow ? colors.red : colors.amber },
+                    { width: `${percent}%`, backgroundColor: colors.amber },
                   ]}
                 />
               </View>
@@ -1051,6 +1061,20 @@ const styles = StyleSheet.create({
   stockBigValue: {
     fontSize: fontSize.h1 - 2,
     fontWeight: '500',
+    color: colors.textPrimary,
+  },
+  lowStockNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: colors.border,
+  },
+  lowStockNoticeText: {
+    fontSize: fontSize.small,
+    fontWeight: '500',
+    color: colors.red,
   },
   progressBg: {
     height: 6,

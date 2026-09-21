@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import Alert from '../utils/alert';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, fontSize } from '../utils/theme';
-import { verifyPinCode } from '../utils/storage';
+import { verifyPinCode, getSession, requestPinResetEmail } from '../utils/storage';
 
 const KEYPAD_ROWS = [
   ['1', '2', '3'],
@@ -11,9 +12,38 @@ const KEYPAD_ROWS = [
   ['', '0', 'del'],
 ];
 
-export default function PinLockScreen({ onUnlock }) {
+export default function PinLockScreen({ onUnlock, onLogout }) {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
+
+  const handleForgotPin = async () => {
+    setSendingReset(true);
+    try {
+      const session = await getSession();
+      const email = session?.user?.email;
+      if (!email) {
+        Alert.alert('Gagal', 'Tidak bisa menemukan email akunmu. Coba keluar dan masuk ulang.');
+        return;
+      }
+      await requestPinResetEmail(email);
+      Alert.alert(
+        'Cek email kamu',
+        `Link untuk membuat PIN baru sudah dikirim ke ${email}. Buka link itu, nanti kamu akan diminta membuat PIN baru.`
+      );
+    } catch (e) {
+      Alert.alert('Gagal mengirim email', e.message || 'Terjadi kesalahan, coba lagi.');
+    } finally {
+      setSendingReset(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert('Keluar dari akun ini?', 'Berguna kalau kamu mau login pakai akun lain di perangkat ini.', [
+      { text: 'Batal', style: 'cancel' },
+      { text: 'Keluar', style: 'destructive', onPress: () => onLogout && onLogout() },
+    ]);
+  };
 
   const handlePress = async (key) => {
     if (key === '') return;
@@ -92,6 +122,16 @@ export default function PinLockScreen({ onUnlock }) {
             ))}
           </View>
         ))}
+      </View>
+
+      <View style={styles.bottomLinks}>
+        <TouchableOpacity onPress={handleForgotPin} disabled={sendingReset}>
+          <Text style={styles.linkText}>{sendingReset ? 'Mengirim...' : 'Lupa PIN?'}</Text>
+        </TouchableOpacity>
+        <Text style={styles.linkDivider}>·</Text>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={styles.linkText}>Keluar</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -173,5 +213,19 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '500',
     color: '#fff',
+  },
+  bottomLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
+  linkText: {
+    fontSize: fontSize.small,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '500',
+  },
+  linkDivider: {
+    color: 'rgba(255,255,255,0.4)',
   },
 });

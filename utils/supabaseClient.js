@@ -29,7 +29,9 @@ export const supabase = createClient(
       storage: authStorage,
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: false,
+      // Wajib true di web supaya link dari email (reset password/PIN) yang membawa token
+      // di URL bisa otomatis dibaca jadi sesi login. Di native ini tidak relevan.
+      detectSessionInUrl: Platform.OS === 'web',
     },
   }
 );
