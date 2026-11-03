@@ -17,6 +17,7 @@ import {
   disablePin,
   verifyPinCode,
   signOutUser,
+  updateUserEmail,
   getSession,
   requestPinResetEmail,
   addEmergencyContact,
@@ -34,6 +35,8 @@ import {
 export default function SettingsScreen({ navigation }) {
   const [profile, setProfile] = useState(null);
   const [userEmail, setUserEmail] = useState('');
+  const [showChangeEmail, setShowChangeEmail] = useState(false);
+  const [newEmailInput, setNewEmailInput] = useState('');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
 
@@ -327,6 +330,29 @@ export default function SettingsScreen({ navigation }) {
     );
   };
 
+  const handleSaveNewEmail = async () => {
+    const email = newEmailInput.trim();
+    if (!email || !email.includes('@')) {
+      Alert.alert('Email tidak valid', 'Masukkan alamat email yang benar.');
+      return;
+    }
+    if (email.toLowerCase() === (userEmail || '').toLowerCase()) {
+      Alert.alert('Email sama', 'Email baru sama dengan email yang sedang dipakai.');
+      return;
+    }
+    try {
+      await updateUserEmail(email);
+      setShowChangeEmail(false);
+      setNewEmailInput('');
+      Alert.alert(
+        'Cek email kamu',
+        `Link konfirmasi sudah dikirim ke ${email}. Email baru baru aktif setelah kamu klik link itu (cek juga inbox email lama kalau diminta konfirmasi di sana).`
+      );
+    } catch (e) {
+      Alert.alert('Gagal mengganti email', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
+  };
+
   const handleSignOut = () => {
     Alert.alert('Keluar dari akun?', 'Kamu bisa login lagi kapan saja dengan email dan password yang sama.', [
       { text: 'Batal', style: 'cancel' },
@@ -374,6 +400,15 @@ export default function SettingsScreen({ navigation }) {
               <Text style={styles.rowSub}>{userEmail || '-'}</Text>
             </View>
           </View>
+          <TouchableOpacity style={styles.row} onPress={() => { setNewEmailInput(''); setShowChangeEmail(true); }}>
+            <View style={[styles.rowIcon, { backgroundColor: colors.cardBg }]}>
+              <Ionicons name="create-outline" size={16} color={colors.textSecondary} />
+            </View>
+            <View style={styles.rowBody}>
+              <Text style={styles.rowTitle}>Ganti email</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+          </TouchableOpacity>
           <TouchableOpacity style={[styles.row, { borderBottomWidth: 0 }]} onPress={handleSignOut}>
             <View style={[styles.rowIcon, { backgroundColor: colors.redBg }]}>
               <Ionicons name="log-out-outline" size={16} color={colors.red} />
@@ -570,6 +605,35 @@ export default function SettingsScreen({ navigation }) {
         </View>
 
       </ScrollView>
+
+      <Modal visible={showChangeEmail} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Ganti email</Text>
+            <Text style={styles.modalSub}>
+              Email sekarang: {userEmail || '-'}. Link konfirmasi akan dikirim ke email baru, dan
+              email baru baru berlaku setelah link itu diklik.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              value={newEmailInput}
+              onChangeText={setNewEmailInput}
+              placeholder="email.baru@contoh.com"
+              placeholderTextColor={colors.textTertiary}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowChangeEmail(false)}>
+                <Text style={styles.modalCancelText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveNewEmail}>
+                <Text style={styles.modalSaveText}>Kirim konfirmasi</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showEditNickname} transparent animationType="fade">
         <View style={styles.modalOverlay}>

@@ -68,6 +68,13 @@ export async function resetPasswordForEmail(email) {
   if (error) throw error;
 }
 
+// Ganti email akun - Supabase akan kirim link konfirmasi ke email BARU (dan biasanya juga
+// email lama, tergantung setting project) sebelum perubahan benar-benar berlaku.
+export async function updateUserEmail(newEmail) {
+  const { error } = await supabase.auth.updateUser({ email: newEmail });
+  if (error) throw error;
+}
+
 // callback(session | null) dipanggil setiap kali status login berubah
 // callback(session | null, event) dipanggil setiap kali status login berubah. `event` berguna
 // untuk mendeteksi kejadian khusus, misal 'PASSWORD_RECOVERY' saat user klik link lupa PIN/password dari email.
@@ -703,6 +710,44 @@ export async function updateMedicineLog(logId, { dateString, takenAtTime }) {
 
 export async function addManualMedicineLog(medicineId, scheduledTime, dateString, takenAtTime) {
   return await markMedicineTaken(medicineId, scheduledTime, { dateString, takenAtTime });
+}
+
+// Mengurangi stok obat dengan catatan bebas (bukan "minum tepat waktu" biasa - misal obat
+// rusak/hilang/dibuang, atau penyesuaian jumlah lain). Dipakai BERSAMA oleh dua pintu masuk:
+// tombol "Kurangi butir obat" di halaman Detail Obat, DAN entri timeline kategori "obat" -
+// supaya keduanya selalu sinkron (nambah dari salah satu otomatis tercatat di keduanya).
+export async function addMedicineReductionNote(medicineId, dateString, note) {
+  const userId = await getUserId();
+  const medicine = await getMedicineById(medicineId);
+  if (!medicine) throw new Error('Obat tidak ditemukan.');
+
+  const matchedBottle = await findBottleForDate(medicineId, dateString);
+  const bottleNumber = matchedBottle?.bottleNumber ?? null;
+
+  const { data, error } = await supabase.from('medicine_logs').insert({
+    user_id: userId,
+    medicine_id: medicineId,
+    date: dateString,
+    scheduled_time: medicine.scheduleTime || null,
+    taken_at_time: medicine.scheduleTime || '00:00',
+    status: 'catatan',
+    note: note || null,
+    bottle_number: bottleNumber,
+  }).select().single();
+  if (error) throw error;
+
+  await recalculateStockRemaining(medicineId);
+
+  const kategoriLabel = medicine.category === 'ARV' ? 'ARV' : medicine.category === 'pendamping' ? 'Pendamping' : 'Temporer';
+  await saveTimelineEntry({
+    entryDate: dateString,
+    entryType: 'obat',
+    title: `${kategoriLabel}: ${medicine.name}`,
+    description: note || '',
+    refMedicineId: medicineId,
+  });
+
+  return objToCamel(data);
 }
 
 // Mencatat BANYAK log minum sekaligus dalam satu kali proses - dipakai fitur "Catat banyak

@@ -18,6 +18,7 @@ import {
   deleteStockHistoryEntry,
   addManualMedicineLog,
   addManualMedicineLogsBulk,
+  addMedicineReductionNote,
   markMedicineTaken,
   updateMedicineLog,
   deleteMedicineLog,
@@ -79,7 +80,14 @@ function parseBulkPasteText(text, defaultTime) {
   return { valid, invalidLineNumbers };
 }
 
+// Log "kurangi butir obat" (status 'catatan') menampilkan catatannya, bukan "Tepat waktu"
+function getLogDotColor(log) {
+  if (log.status === 'catatan') return colors.textTertiary;
+  return log.status === 'tepat' ? colors.green : colors.amber;
+}
+
 function getKeteranganWaktu(log) {
+  if (log.note) return log.note;
   const diff = calculateMinutesDiff(log.scheduledTime, log.takenAtTime);
   if (Math.abs(diff) <= 30) return 'Tepat waktu';
 
@@ -126,6 +134,10 @@ export default function MedicineDetailScreen({ route, navigation }) {
   const [bulkTime, setBulkTime] = useState('');
   const [bulkPasteText, setBulkPasteText] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+
+  const [showReduceStock, setShowReduceStock] = useState(false);
+  const [reduceDate, setReduceDate] = useState(getTodayDateString());
+  const [reduceNote, setReduceNote] = useState('');
 
   const [editingLog, setEditingLog] = useState(null);
 
@@ -220,6 +232,30 @@ export default function MedicineDetailScreen({ route, navigation }) {
       // bottleNumber tidak perlu dipilih - otomatis dicari dari rentang tanggal botol yang sesuai
       await addManualMedicineLog(medicineId, medicine.scheduleTime, manualDate, manualTime);
       setShowManualLog(false);
+      await loadData();
+    } catch (e) {
+      Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
+    }
+  };
+
+  const handleOpenReduceStock = () => {
+    setReduceDate(getTodayDateString());
+    setReduceNote('');
+    setShowReduceStock(true);
+  };
+
+  const handleSaveReduceStock = async () => {
+    if (!reduceDate) {
+      Alert.alert('Tanggal kosong', 'Pilih tanggal pengurangan obat.');
+      return;
+    }
+    if (!reduceNote.trim()) {
+      Alert.alert('Catatan kosong', 'Isi catatan alasan pengurangan (misal: obat rusak, hilang, dll).');
+      return;
+    }
+    try {
+      await addMedicineReductionNote(medicineId, reduceDate, reduceNote.trim());
+      setShowReduceStock(false);
       await loadData();
     } catch (e) {
       Alert.alert('Gagal menyimpan', e.message || 'Terjadi kesalahan, coba lagi.');
@@ -616,7 +652,7 @@ export default function MedicineDetailScreen({ route, navigation }) {
                           <View
                             style={[
                               styles.logDot,
-                              { backgroundColor: log.status === 'tepat' ? colors.green : colors.amber },
+                              { backgroundColor: getLogDotColor(log) },
                             ]}
                           />
                           <View style={{ flex: 1 }}>
@@ -666,7 +702,7 @@ export default function MedicineDetailScreen({ route, navigation }) {
                 <View style={styles.bottleLogContainer}>
                   {orphanLogs.map((log) => (
                     <View key={log.id} style={styles.bottleLogRow}>
-                      <View style={[styles.logDot, { backgroundColor: log.status === 'tepat' ? colors.green : colors.amber }]} />
+                      <View style={[styles.logDot, { backgroundColor: getLogDotColor(log) }]} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.bottleLogText}>
                           {formatDateIndo(log.date)} · {log.takenAtTime}
@@ -711,6 +747,12 @@ export default function MedicineDetailScreen({ route, navigation }) {
               <Ionicons name="chevron-forward" size={16} color={colors.green} />
             </TouchableOpacity>
           )}
+
+          <TouchableOpacity style={styles.manageRow} onPress={handleOpenReduceStock}>
+            <Ionicons name="remove-circle-outline" size={18} color={colors.textSecondary} />
+            <Text style={styles.manageRowText}>Kurangi butir obat (dengan catatan)</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textTertiary} />
+          </TouchableOpacity>
 
           <TouchableOpacity style={styles.manageRow} onPress={handleOpenBulkLog}>
             <Ionicons name="albums-outline" size={18} color={colors.textSecondary} />
@@ -822,6 +864,38 @@ export default function MedicineDetailScreen({ route, navigation }) {
                 <Text style={styles.modalCancelText}>Batal</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveManualLog}>
+                <Text style={styles.modalSaveText}>Simpan</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal: Kurangi butir obat dengan catatan - masuk ke riwayat botol & Timeline (kategori obat) */}
+      <Modal visible={showReduceStock} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Kurangi butir obat</Text>
+            <Text style={styles.modalSub}>
+              Dipakai kalau stok berkurang bukan karena minum biasa (misal obat rusak, hilang, atau
+              penyesuaian jumlah). Mengurangi stok sebanyak 1 dosis, tercatat di riwayat botol
+              sesuai tanggal dan otomatis masuk ke Timeline.
+            </Text>
+            <DatePickerField label="Tanggal" required value={reduceDate} onChange={setReduceDate} />
+            <FieldLabel required>Catatan</FieldLabel>
+            <TextInput
+              style={[styles.modalInput, { minHeight: 80, textAlignVertical: 'top' }]}
+              value={reduceNote}
+              onChangeText={setReduceNote}
+              placeholder="Contoh: obat tumpah, hilang, dibagi ke teman, dll"
+              placeholderTextColor={colors.textTertiary}
+              multiline
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowReduceStock(false)}>
+                <Text style={styles.modalCancelText}>Batal</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveReduceStock}>
                 <Text style={styles.modalSaveText}>Simpan</Text>
               </TouchableOpacity>
             </View>

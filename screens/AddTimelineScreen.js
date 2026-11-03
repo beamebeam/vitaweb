@@ -7,6 +7,7 @@ import { DatePickerField, FieldLabel } from '../components/DateTimeFields';
 import { colors, spacing, fontSize, radius } from '../utils/theme';
 import {
   saveTimelineEntry,
+  addMedicineReductionNote,
   updateTimelineEntry,
   deleteTimelineEntry,
   getTimelineEntries,
@@ -130,6 +131,11 @@ export default function AddTimelineScreen({ navigation, route }) {
     try {
       if (isEditMode) {
         await updateTimelineEntry(editingEntryId, payload);
+      } else if (entryType === 'obat') {
+        // Entri timeline kategori obat BARU otomatis mengurangi stok obat & tercatat di riwayat
+        // botol (sama persis dengan tombol "Kurangi butir obat" di Detail Obat). Kalau cuma
+        // MENGEDIT catatan lama (isEditMode), stok tidak diubah lagi supaya tidak terhitung ganda.
+        await addMedicineReductionNote(selectedMedicineId, entryDate.trim(), description.trim());
       } else {
         await saveTimelineEntry(payload);
       }
